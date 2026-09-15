@@ -1,14 +1,25 @@
 # Railway builds this repo with Nixpacks (see railway.json).
 
+[variables]
+# Pin the runtime to the version this project is tested against; without it the
+# builder picks the newest Node satisfying package.json engines.
+NIXPACKS_NODE_VERSION = "22"
+
 [phases.setup]
 # ffmpeg does every bit of the media work; fonts-noto-cjk renders Japanese
 # captions (config.ts looks for NotoSansCJK before falling back to a Latin face).
 aptPkgs = ["ffmpeg", "fonts-noto-cjk", "ca-certificates"]
 
 [phases.install]
-# --include=dev is explicit because the build needs tsc and vite, and the
-# builder may already have NODE_ENV=production in the environment.
-cmds = ["npm ci --include=dev --no-audit --no-fund"]
+# --include=dev because the build needs tsc and vite, and the builder may
+# already have NODE_ENV=production in the environment.
+#
+# --ignore-scripts because npm implicitly runs `node-gyp rebuild` for any
+# dependency that ships a binding.gyp, even one with no install script.
+# better-sqlite3 ships ready-made Node-API binaries in prebuilds/, so that
+# rebuild is both unnecessary and fatal here (the image has no Python or
+# compiler). No dependency in this project needs an install script.
+cmds = ["npm ci --include=dev --ignore-scripts --no-audit --no-fund"]
 
 [phases.build]
 cmds = ["npm run build"]
