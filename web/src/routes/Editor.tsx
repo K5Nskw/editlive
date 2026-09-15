@@ -58,7 +58,20 @@ export function Editor({ recordingId, integrations, onNotify, onBack }: EditorPr
   const [publishTarget, setPublishTarget] = useState<Clip | null>(null);
   const [notFound, setNotFound] = useState(false);
 
+  // While the encoder is connected the player can show the broadcast as it
+  // happens, or the same segments served as a finished recording. Scrubbing
+  // back switches to the latter, because a live playlist keeps pulling the
+  // playhead toward the live edge instead of holding a chosen moment.
+  const [mode, setMode] = useState<'live' | 'review'>('live');
+  const [reviewToken, setReviewToken] = useState(0);
+  const [reviewStart, setReviewStart] = useState<number | null>(null);
+  const [reviewLimit, setReviewLimit] = useState(0);
+  const [analysisTick, setAnalysisTick] = useState(0);
+
+  const live = recording?.status === 'live';
+  const reviewing = live && mode === 'review';
   const duration = recording && recording.duration > 0 ? recording.duration : videoDuration;
+  const playbackSrc = reviewing && recording?.live ? `${recording.live.archiveUrl}?v=${reviewToken}` : recording?.playbackUrl ?? '';
 
   const load = useCallback(async () => {
     try {
@@ -75,14 +88,25 @@ export function Editor({ recordingId, integrations, onNotify, onBack }: EditorPr
     void load();
   }, [load]);
 
-  // The analysis file only appears once the analyse job finishes.
+  // Ready once the analyse job finishes, and partial (audio only) while the
+  // broadcast is still running.
   useEffect(() => {
-    if (recording?.analysisStatus !== 'ready') return;
+    if (recording?.analysisStatus !== 'ready' && recording?.status !== 'live') return;
     api
       .analysis(recordingId)
       .then((res) => setAnalysis(res.analysis))
-      .catch(() => setAnalysis(null));
-  }, [recordingId, recording?.analysisStatus]);
+      .catch(() => undefined);
+  }, [recordingId, recording?.analysisStatus, recording?.status, analysisTick]);
+
+  usePolling(() => setAnalysisTick((n) => n + 1), 8000, Boolean(live));
+
+  // Once the broadcast ends the finished file is the only source worth using.
+  useEffect(() => {
+    if (!live) {
+      setMode('live');
+      setReviewStart(null);
+    }
+  }, [live]);
 
   const needsPolling =
     recording?.status === 'live' ||
@@ -97,10 +121,28 @@ export function Editor({ recordingId, integrations, onNotify, onBack }: EditorPr
     if (duration > 0 && outPoint <= inPoint) setOutPoint(Math.min(duration, inPoint + 20));
   }, [duration, inPoint, outPoint]);
 
-  const seek = useCallback((time: number) => {
-    const video = videoRef.current;
-    setCurrentTime(time);
-    if (video) video.currentTime = time;
+  const seek = useCallback(
+    (time: number) => {
+      setCurrentTime(time);
+      if (live) {
+        // Entering review, or aiming past what the attached playlist covers,
+        // needs a freshly cut archive of everything recorded so far.
+        if (mode === 'live' || time > reviewLimit) {
+          setMode('review');
+          setReviewStart(time);
+          setReviewToken((n) => n + 1);
+          return;
+        }
+      }
+      const video = videoRef.current;
+      if (video) video.currentTime = time;
+    },
+    [live, mode, reviewLimit],
+  );
+
+  const backToLive = useCallback(() => {
+    setMode('live');
+    setReviewStart(null);
   }, []);
 
   useEffect(() => {
@@ -209,7 +251,9 @@ export function Editor({ recordingId, integrations, onNotify, onBack }: EditorPr
             )}
             {recording.status === 'processing' && <span className="badge warn">処理中</span>}
             {recording.status === 'failed' && <span className="badge err">失敗</span>}
-            <span className="badge">{ANALYSIS_LABEL[recording.analysisStatus]}</span>
+            <span className="badge">
+              {live ? '波形：ここまでの音声' : ANALYSIS_LABEL[recording.analysisStatus]}
+            </span>
           </div>
           <p className="sub" style={{ margin: '4px 0 0' }}>
             {formatDateTime(recording.startedAt)} · {formatTimecode(duration)}
@@ -242,11 +286,16 @@ export function Editor({ recordingId, integrations, onNotify, onBack }: EditorPr
         <div>
           <div className="player-shell">
             <Player
-              src={recording.playbackUrl}
+              src={playbackSrc}
               poster={recording.posterUrl}
               videoRef={videoRef}
+              startAt={reviewing ? reviewStart : null}
+              autoPlay={reviewing}
               onTimeUpdate={setCurrentTime}
-              onDuration={setVideoDuration}
+              onDuration={(d) => {
+                setVideoDuration(d);
+                if (reviewing) setReviewLimit(d);
+              }}
             />
             <div className="transport">
               <button
@@ -262,6 +311,16 @@ export function Editor({ recordingId, integrations, onNotify, onBack }: EditorPr
               <button className="ghost" onClick={() => seek(inPoint)}>
                 イン点へ
               </button>
+              {live &&
+                (reviewing ? (
+                  <button className="small" onClick={backToLive}>
+                    ● ライブに戻る
+                  </button>
+                ) : (
+                  <span className="badge live">
+                    <i className="pulse" /> ライブ
+                  </span>
+                ))}
               <span className="spacer" style={{ flex: 1 }} />
               <span className="time-display">
                 <b>{formatTimecode(currentTime, true)}</b> / {formatTimecode(duration)}
@@ -315,6 +374,14 @@ export function Editor({ recordingId, integrations, onNotify, onBack }: EditorPr
               setOutPoint(clamp(b, 0, duration));
             }}
           />
+
+          {live && (
+            <p className="hint" style={{ marginTop: 8 }}>
+              {reviewing
+                ? 'いま録画を再生しています。配信は裏で録り続けているので、このまま範囲を決めて書き出せます。最新の映像に戻るには「ライブに戻る」。'
+                : 'タイムラインをクリックすると、その時点まで巻き戻して編集できます（配信は止まりません）。'}
+            </p>
+          )}
 
           <div className="card" style={{ marginTop: 16 }}>
             <h2>クリップの設定</h2>
@@ -455,12 +522,12 @@ export function Editor({ recordingId, integrations, onNotify, onBack }: EditorPr
             <div className="row" style={{ justifyContent: 'space-between' }}>
               <h2 style={{ margin: 0 }}>タイムラインの波形</h2>
               <span className={`badge ${recording.analysisStatus === 'failed' ? 'err' : ''}`}>
-                {ANALYSIS_LABEL[recording.analysisStatus]}
+                {live ? 'ここまでの音声' : ANALYSIS_LABEL[recording.analysisStatus]}
               </span>
             </div>
             <p className="hint">
-              {recording.status === 'live'
-                ? '配信が終わると、音量と動きの波形・カット位置をタイムラインに描きます。配信中でも範囲を選んで書き出せます。'
+              {live
+                ? '配信中は音量の波形をそのつど伸ばしています。配信が終わると、動きの大きさとカット位置を足した完全版に作り直します。'
                 : '音量と動きの大きさ、カットの位置をタイムラインに重ねて、切りどころを探しやすくします。'}
             </p>
             <button

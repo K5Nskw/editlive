@@ -44,6 +44,16 @@ function clamp01(v: number): number {
   return v < 0 ? 0 : v > 1 ? 1 : v;
 }
 
+/** Per-interval RMS of one file, measured from its own start. */
+export async function measureFileLoudness(
+  file: string,
+  interval: number,
+  buckets: number,
+  signal?: AbortSignal,
+): Promise<number[]> {
+  return measureLoudness(file, buckets, interval, signal);
+}
+
 /**
  * RMS level in dBFS per interval. `asetnsamples` cuts the audio into
  * one-interval frames and `astats` is reset per frame, so every printed value
@@ -145,7 +155,12 @@ async function measureMotion(
  * Loudness is judged against the recording's own baseline, so a quiet studio
  * feed and a loud arena feed produce comparable curves.
  */
-export function buildEnergy(loudness: number[], motion: number[], hasAudio: boolean): number[] {
+export function buildEnergy(
+  loudness: number[],
+  motion: number[],
+  hasAudio: boolean,
+  hasMotion = true,
+): number[] {
   const audible = loudness.filter((v) => v > SILENT_DB + 1);
   const audioBase = audible.length > 0 ? percentile(audible, 0.5) : SILENT_DB;
   const audioPeak = audible.length > 0 ? percentile(audible, 0.98) : SILENT_DB + 1;
@@ -157,7 +172,8 @@ export function buildEnergy(loudness: number[], motion: number[], hasAudio: bool
 
   return loudness.map((loud, i) => {
     const a = hasAudio ? clamp01((loud - audioBase) / audioRange) : 0;
-    const m = clamp01((motion[i]! - motionBase) / motionRange);
+    const m = hasMotion ? clamp01((motion[i]! - motionBase) / motionRange) : 0;
+    if (!hasMotion) return a;
     return hasAudio ? 0.72 * a + 0.28 * m : m;
   });
 }
@@ -190,6 +206,8 @@ export async function analyzeSource(source: string, signal?: AbortSignal): Promi
     generatedAt: Date.now(),
   };
 }
+
+export const SILENT_LEVEL_DB = SILENT_DB;
 
 export function writeAnalysis(dir: string, analysis: AnalysisResult): void {
   fs.writeFileSync(path.join(dir, 'analysis.json'), JSON.stringify(analysis));

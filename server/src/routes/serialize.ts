@@ -57,6 +57,9 @@ export function recordingDto(row: RecordingRow, stream?: StreamRow) {
             thumbInterval: config.thumbIntervalSeconds,
             thumbWidth: THUMB_WIDTH,
             baseUrl: `/media/recordings/${row.id}/`,
+            // Same segments, presented as a finished recording, so scrubbing
+            // back behaves like editing a file instead of chasing a live edge.
+            archiveUrl: `/media/recordings/${row.id}/archive.m3u8`,
           }
         : null,
   };

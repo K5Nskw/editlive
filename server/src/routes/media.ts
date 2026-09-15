@@ -30,6 +30,37 @@ export const recordingMediaRouter: Router = Router();
 
 recordingMediaRouter.use(requireAuth);
 
+/**
+ * The same segments as the live playlist, presented as a finished recording.
+ *
+ * A player handed a live playlist manages latency and a moving live edge, which
+ * fights every attempt to sit still on a past moment. Serving the identical
+ * segment list with an ENDLIST turns the broadcast so far into an ordinary VOD
+ * asset: seek anywhere, stay there, frame a cut. Nothing is copied — this is a
+ * second view of the files the recorder is already writing.
+ */
+recordingMediaRouter.get('/:id/archive.m3u8', (req, res) => {
+  const rec = db.prepare('SELECT * FROM recordings WHERE id = ?').get(req.params.id) as RecordingRow | undefined;
+  const playlist = rec ? path.join(rec.dir, 'index.m3u8') : undefined;
+  if (!playlist || !fs.existsSync(playlist)) {
+    res.status(404).json({ error: 'file not found' });
+    return;
+  }
+
+  const lines = fs.readFileSync(playlist, 'utf8').split('\n');
+  const body: string[] = [];
+  for (const line of lines) {
+    if (line.startsWith('#EXT-X-ENDLIST')) continue;
+    body.push(line.startsWith('#EXT-X-PLAYLIST-TYPE') ? '#EXT-X-PLAYLIST-TYPE:VOD' : line);
+  }
+  while (body.length > 0 && body[body.length - 1]!.trim() === '') body.pop();
+  body.push('#EXT-X-ENDLIST', '');
+
+  res.type('application/vnd.apple.mpegurl');
+  res.setHeader('cache-control', 'no-store');
+  res.send(body.join('\n'));
+});
+
 recordingMediaRouter.get('/:id/:file', (req, res) => {
   const rec = db.prepare('SELECT * FROM recordings WHERE id = ?').get(req.params.id) as RecordingRow | undefined;
   const file = path.basename(req.params.file);

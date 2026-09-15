@@ -5,6 +5,9 @@ interface PlayerProps {
   src: string;
   poster: string | null;
   videoRef: RefObject<HTMLVideoElement | null>;
+  /** Where to land once this source is ready, for switching sources mid-edit. */
+  startAt?: number | null;
+  autoPlay?: boolean;
   onTimeUpdate: (time: number) => void;
   onDuration: (duration: number) => void;
 }
@@ -20,7 +23,7 @@ const RETRY_MS = 2000;
  * hls.js give up and leave a permanently black player, every fatal load error
  * is retried until the stream shows up.
  */
-export function Player({ src, poster, videoRef, onTimeUpdate, onDuration }: PlayerProps) {
+export function Player({ src, poster, videoRef, startAt, autoPlay, onTimeUpdate, onDuration }: PlayerProps) {
   const hlsRef = useRef<HlsType | null>(null);
   const [waiting, setWaiting] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -35,8 +38,20 @@ export function Player({ src, poster, videoRef, onTimeUpdate, onDuration }: Play
     let retryTimer: number | undefined;
     let attempts = 0;
 
-    const isHls = src.endsWith('.m3u8');
+    const isHls = src.includes('.m3u8');
     setWaiting(isHls ? '映像を待っています…' : null);
+
+    const ready = () => {
+      if (disposed) return;
+      if (typeof startAt === 'number' && Number.isFinite(startAt)) {
+        try {
+          video.currentTime = startAt;
+        } catch {
+          /* the range is not seekable yet; the player keeps its own position */
+        }
+      }
+      if (autoPlay) void video.play().catch(() => undefined);
+    };
 
     if (isHls && !video.canPlayType('application/vnd.apple.mpegurl')) {
       void import('hls.js').then(({ default: Hls }) => {
@@ -58,6 +73,7 @@ export function Player({ src, poster, videoRef, onTimeUpdate, onDuration }: Play
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
           attempts = 0;
           setWaiting(null);
+          ready();
         });
 
         hls.on(Hls.Events.ERROR, (_event, data) => {
@@ -93,9 +109,13 @@ export function Player({ src, poster, videoRef, onTimeUpdate, onDuration }: Play
         }, RETRY_MS);
       };
       video.addEventListener('error', onError);
-      video.addEventListener('loadedmetadata', () => setWaiting(null));
+      video.addEventListener('loadedmetadata', () => {
+        setWaiting(null);
+        ready();
+      });
     } else {
       video.src = src;
+      video.addEventListener('loadedmetadata', ready, { once: true });
     }
 
     return () => {
@@ -104,6 +124,9 @@ export function Player({ src, poster, videoRef, onTimeUpdate, onDuration }: Play
       hlsRef.current?.destroy();
       hlsRef.current = null;
     };
+    // startAt/autoPlay are read when the source becomes ready, not as triggers:
+    // re-running on every value would re-attach the media mid-playback.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [src, videoRef, reloadKey]);
 
   return (

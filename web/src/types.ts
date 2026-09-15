@@ -54,6 +54,7 @@ export interface Recording {
     thumbInterval: number;
     thumbWidth: number;
     baseUrl: string;
+    archiveUrl: string;
   } | null;
   clipCount?: number;
 }

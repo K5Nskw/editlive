@@ -3,6 +3,7 @@ import path from 'node:path';
 import { config } from '../config.ts';
 import { db } from '../db/index.ts';
 import type { RecordingRow, StreamRow } from '../db/types.ts';
+import { buildEnergy, measureFileLoudness, SILENT_LEVEL_DB, writeAnalysis } from '../media/analyze.ts';
 import { runFfmpeg, spawnFfmpeg, type LongRunningProcess } from '../media/ffmpeg.ts';
 import { enqueueJob } from '../jobs/queue.ts';
 import { newId } from '../util/ids.ts';
@@ -21,6 +22,10 @@ interface Active {
 }
 
 export const THUMB_WIDTH = 160;
+const ANALYSIS_INTERVAL = 1;
+
+/** Loudness measured so far, per live recording, one entry per second. */
+const liveLoudness = new Map<string, { levels: number[]; processed: number }>();
 
 const active = new Map<string, Active>(); // keyed by stream id
 
@@ -73,6 +78,53 @@ async function captureLiveThumbs(dir: string, signal: AbortSignal): Promise<void
       return;
     }
   }
+}
+
+/**
+ * Measure the audio of each finished segment and keep the curve growing, so the
+ * timeline shows where the loud moments were while the broadcast is still on.
+ * Only audio is measured here — the motion and cut passes decode video and are
+ * left to the full analysis that runs once the encoder disconnects.
+ */
+async function analyseLiveAudio(recordingId: string, dir: string, signal: AbortSignal): Promise<void> {
+  const segments = fs
+    .readdirSync(dir)
+    .filter((f) => /^seg_\d+\.ts$/.test(f))
+    .sort();
+  const usable = segments.length - 1; // the newest segment is still being written
+  const state = liveLoudness.get(recordingId) ?? { levels: [], processed: 0 };
+  if (state.processed >= usable) return;
+
+  const perSegment = Math.max(1, Math.round(config.hlsSegmentSeconds / ANALYSIS_INTERVAL));
+  for (let index = state.processed; index < usable; index++) {
+    const segment = segments[index];
+    if (!segment) break;
+    let levels: number[];
+    try {
+      levels = await measureFileLoudness(path.join(dir, segment), ANALYSIS_INTERVAL, perSegment, signal);
+    } catch (err) {
+      log.debug(`live audio analysis stopped at segment ${index}`, err);
+      break;
+    }
+    for (let i = 0; i < perSegment; i++) state.levels[index * perSegment + i] = levels[i] ?? SILENT_LEVEL_DB;
+    state.processed = index + 1;
+  }
+  liveLoudness.set(recordingId, state);
+
+  const loudness = state.levels.map((v) => v ?? SILENT_LEVEL_DB);
+  if (loudness.length === 0) return;
+  const hasAudio = loudness.some((v) => v > SILENT_LEVEL_DB + 1);
+  const motion = new Array<number>(loudness.length).fill(0);
+  writeAnalysis(dir, {
+    duration: loudness.length * ANALYSIS_INTERVAL,
+    interval: ANALYSIS_INTERVAL,
+    energy: buildEnergy(loudness, motion, hasAudio, false).map((v) => Math.round(v * 1000) / 1000),
+    loudness: loudness.map((v) => Math.round(v * 10) / 10),
+    motion,
+    scenes: [],
+    hasAudio,
+    generatedAt: Date.now(),
+  });
 }
 
 /** Live progress of the HLS output, which is what the browser plays back. */
@@ -258,17 +310,21 @@ export function startRecording(stream: StreamRow): RecordingRow | undefined {
   }, 10_000);
   bytesTimer.unref();
 
-  const thumbs = new AbortController();
-  let capturing = false;
+  liveLoudness.set(recordingId, { levels: [], processed: 0 });
+  const liveWork = new AbortController();
+  let working = false;
   const thumbTimer = setInterval(() => {
-    if (capturing) return;
-    capturing = true;
-    void captureLiveThumbs(dir, thumbs.signal)
-      .catch((err) => log.debug(`live thumbnails for ${recordingId} stopped`, err))
+    if (working) return;
+    working = true;
+    void Promise.all([
+      captureLiveThumbs(dir, liveWork.signal),
+      analyseLiveAudio(recordingId, dir, liveWork.signal),
+    ])
+      .catch((err) => log.debug(`live analysis for ${recordingId} stopped`, err))
       .finally(() => {
-        capturing = false;
+        working = false;
       });
-  }, Math.max(5, config.thumbIntervalSeconds) * 1000);
+  }, Math.max(4, config.hlsSegmentSeconds * 2) * 1000);
   thumbTimer.unref();
 
   active.set(stream.id, { recordingId, streamId: stream.id, dir, proc, startedAt: now, bytesTimer, thumbTimer });
@@ -290,6 +346,7 @@ export async function stopRecording(streamId: string): Promise<void> {
   const entry = active.get(streamId);
   if (!entry) return;
   active.delete(streamId);
+  liveLoudness.delete(entry.recordingId);
   clearInterval(entry.bytesTimer);
   clearInterval(entry.thumbTimer);
 
