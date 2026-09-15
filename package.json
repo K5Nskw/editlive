@@ -1,0 +1,20 @@
+{
+  "name": "editlive",
+  "private": true,
+  "version": "0.1.0",
+  "description": "RTMP ingest -> auto highlight detection -> browser editor -> publish",
+  "workspaces": ["server", "web"],
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "dev": "concurrently -n server,web -c cyan,magenta \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:server": "npm --workspace server run dev",
+    "dev:web": "npm --workspace web run dev",
+    "build": "npm --workspace web run build && npm --workspace server run build",
+    "start": "npm --workspace server run start",
+    "typecheck": "npm --workspace server run typecheck && npm --workspace web run typecheck",
+    "test": "npm --workspace server run test"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.5"
+  }
+}

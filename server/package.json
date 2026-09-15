@@ -1,0 +1,29 @@
+{
+  "name": "@editlive/server",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "node --enable-source-maps --experimental-strip-types --watch src/index.ts",
+    "build": "tsc -p tsconfig.json && node scripts/copy-assets.mjs",
+    "start": "node --enable-source-maps dist/index.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --experimental-strip-types --no-warnings --test src/media/analyze.test.ts"
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.3",
+    "cookie-parser": "^1.4.7",
+    "express": "^5.2.1",
+    "googleapis": "^181.0.0",
+    "node-media-server": "^4.4.3",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/cookie-parser": "^1.4.9",
+    "@types/express": "^5.0.6",
+    "@types/node": "^22.10.0",
+    "typescript": "~5.9.2"
+  }
+}
