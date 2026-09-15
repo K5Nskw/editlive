@@ -31,17 +31,6 @@ export interface RecordingRow {
   error: string | null;
 }
 
-export interface HighlightRow {
-  id: string;
-  recording_id: string;
-  start_sec: number;
-  end_sec: number;
-  peak: number;
-  score: number;
-  reason: string;
-  created_at: number;
-}
-
 export interface ClipRow {
   id: string;
   recording_id: string;

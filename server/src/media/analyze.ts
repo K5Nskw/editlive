@@ -9,7 +9,7 @@ export interface AnalysisResult {
   duration: number;
   /** Seconds covered by one entry of `energy` / `loudness` / `motion`. */
   interval: number;
-  /** Combined excitement curve, 0..1, one entry per interval. */
+  /** Combined loudness/motion curve, 0..1, one entry per interval. */
   energy: number[];
   /** RMS level in dBFS per interval (-70 when silent or absent). */
   loudness: number[];
@@ -19,14 +19,6 @@ export interface AnalysisResult {
   scenes: number[];
   hasAudio: boolean;
   generatedAt: number;
-}
-
-export interface HighlightCandidate {
-  start: number;
-  end: number;
-  peak: number;
-  score: number;
-  reason: string;
 }
 
 const SILENT_DB = -70;
@@ -50,24 +42,6 @@ function percentile(values: number[], p: number): number {
 
 function clamp01(v: number): number {
   return v < 0 ? 0 : v > 1 ? 1 : v;
-}
-
-function movingAverage(values: number[], window: number): number[] {
-  if (window <= 1) return [...values];
-  const half = Math.floor(window / 2);
-  const out = new Array<number>(values.length).fill(0);
-  for (let i = 0; i < values.length; i++) {
-    let sum = 0;
-    let n = 0;
-    for (let j = i - half; j <= i + half; j++) {
-      const v = values[j];
-      if (v === undefined) continue;
-      sum += v;
-      n += 1;
-    }
-    out[i] = n > 0 ? sum / n : 0;
-  }
-  return out;
 }
 
 /**
@@ -167,11 +141,11 @@ async function measureMotion(
 }
 
 /**
- * Turn raw measurements into a 0..1 excitement curve. Loudness is judged
- * against the recording's own baseline, so a quiet studio feed and a loud
- * arena feed produce comparable curves.
+ * Turn raw measurements into a 0..1 excitement curve for the editing timeline.
+ * Loudness is judged against the recording's own baseline, so a quiet studio
+ * feed and a loud arena feed produce comparable curves.
  */
-function buildEnergy(loudness: number[], motion: number[], hasAudio: boolean): number[] {
+export function buildEnergy(loudness: number[], motion: number[], hasAudio: boolean): number[] {
   const audible = loudness.filter((v) => v > SILENT_DB + 1);
   const audioBase = audible.length > 0 ? percentile(audible, 0.5) : SILENT_DB;
   const audioPeak = audible.length > 0 ? percentile(audible, 0.98) : SILENT_DB + 1;
@@ -186,113 +160,6 @@ function buildEnergy(loudness: number[], motion: number[], hasAudio: boolean): n
     const m = clamp01((motion[i]! - motionBase) / motionRange);
     return hasAudio ? 0.72 * a + 0.28 * m : m;
   });
-}
-
-function describe(loudDelta: number, motionDelta: number, cuts: number): string {
-  if (cuts >= 3 && loudDelta > 0.3) return '歓声とカット割りが集中';
-  if (loudDelta > 0.55) return '音量が大きく跳ね上がった';
-  if (motionDelta > 0.55) return '画面の動きが激しい';
-  if (cuts >= 3) return 'カットが立て込んでいる';
-  return '平常時より盛り上がっている';
-}
-
-export interface DetectOptions {
-  /** 0..1; higher yields more (and looser) candidates. */
-  sensitivity?: number;
-  maxCandidates?: number;
-  minClipSeconds?: number;
-  maxClipSeconds?: number;
-}
-
-/** Pick peak-centred windows out of the excitement curve. */
-export function detectHighlights(analysis: AnalysisResult, opts: DetectOptions = {}): HighlightCandidate[] {
-  const sensitivity = clamp01(opts.sensitivity ?? 0.5);
-  const maxCandidates = opts.maxCandidates ?? 20;
-  const minClip = opts.minClipSeconds ?? 8;
-  const maxClip = opts.maxClipSeconds ?? 60;
-  const { interval, duration } = analysis;
-
-  const smooth = movingAverage(analysis.energy, Math.max(3, Math.round(3 / interval)));
-  if (smooth.length === 0) return [];
-
-  const mean = smooth.reduce((a, b) => a + b, 0) / smooth.length;
-  const variance = smooth.reduce((acc, v) => acc + (v - mean) ** 2, 0) / smooth.length;
-  const std = Math.sqrt(variance);
-  const k = 1.9 - 1.4 * sensitivity;
-  const threshold = Math.max(0.1, mean + k * std);
-
-  const minGap = Math.round((22 - 10 * sensitivity) / interval);
-  const peaks: Array<{ idx: number; value: number }> = [];
-  for (let i = 0; i < smooth.length; i++) {
-    const value = smooth[i]!;
-    if (value < threshold) continue;
-    let isPeak = true;
-    for (let j = Math.max(0, i - minGap); j <= Math.min(smooth.length - 1, i + minGap); j++) {
-      if (smooth[j]! > value) {
-        isPeak = false;
-        break;
-      }
-    }
-    if (isPeak && !peaks.some((p) => Math.abs(p.idx - i) < minGap)) peaks.push({ idx: i, value });
-  }
-
-  peaks.sort((a, b) => b.value - a.value);
-  const top = peaks.slice(0, maxCandidates);
-  const maxValue = top[0]?.value ?? 1;
-
-  const candidates: HighlightCandidate[] = top.map(({ idx, value }) => {
-    const onsetFloor = value * 0.5;
-    const tailFloor = value * 0.4;
-    let startIdx = idx;
-    while (startIdx > 0 && smooth[startIdx - 1]! > onsetFloor && (idx - startIdx) * interval < 20) startIdx -= 1;
-    let endIdx = idx;
-    while (endIdx < smooth.length - 1 && smooth[endIdx + 1]! > tailFloor && (endIdx - idx) * interval < 15) endIdx += 1;
-
-    // A highlight is the build-up plus the reaction, so pad both sides.
-    let start = Math.max(0, startIdx * interval - 3);
-    let end = Math.min(duration, (endIdx + 1) * interval + 2.5);
-    if (end - start < minClip) {
-      const pad = (minClip - (end - start)) / 2;
-      start = Math.max(0, start - pad);
-      end = Math.min(duration, start + minClip);
-    }
-    if (end - start > maxClip) end = start + maxClip;
-
-    const peakTime = idx * interval;
-    const window = analysis.energy.slice(startIdx, endIdx + 1);
-    const loudDelta = clamp01(Math.max(...window, 0));
-    const motionDelta = clamp01(Math.max(...analysis.motion.slice(startIdx, endIdx + 1), 0));
-    const cuts = analysis.scenes.filter((t) => t >= start && t <= end).length;
-
-    return {
-      start: Math.round(start * 100) / 100,
-      end: Math.round(end * 100) / 100,
-      peak: Math.round(peakTime * 100) / 100,
-      score: Math.round((maxValue > 0 ? value / maxValue : 0) * 1000) / 1000,
-      reason: describe(loudDelta, motionDelta, cuts),
-    };
-  });
-
-  // Peaks are found on a minimum-gap grid but padding can still overlap them.
-  candidates.sort((a, b) => a.start - b.start);
-  const merged: HighlightCandidate[] = [];
-  for (const cand of candidates) {
-    const prev = merged[merged.length - 1];
-    if (prev && cand.start < prev.end) {
-      if (cand.score > prev.score) {
-        prev.end = Math.min(Math.max(prev.end, cand.end), prev.start + maxClip);
-        prev.score = cand.score;
-        prev.peak = cand.peak;
-        prev.reason = cand.reason;
-      } else {
-        prev.end = Math.min(Math.max(prev.end, cand.end), prev.start + maxClip);
-      }
-      continue;
-    }
-    merged.push({ ...cand });
-  }
-
-  return merged.sort((a, b) => b.score - a.score);
 }
 
 /** Decode the recording once for audio and once for video, at low resolution. */

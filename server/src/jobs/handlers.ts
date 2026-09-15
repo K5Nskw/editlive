@@ -3,12 +3,11 @@ import path from 'node:path';
 import { config } from '../config.ts';
 import { db } from '../db/index.ts';
 import type { ClipRow, RecordingRow } from '../db/types.ts';
-import { analyzeSource, detectHighlights, writeAnalysis, type DetectOptions } from '../media/analyze.ts';
+import { analyzeSource, writeAnalysis } from '../media/analyze.ts';
 import { probe, runFfmpeg } from '../media/ffmpeg.ts';
 import { extractThumbnail, generateSprite, renderClip, type RenderSpec } from '../media/render.ts';
 import { HLS_PLAYLIST, MASTER_FILE, SOURCE_FILE, sourceFor } from '../ingest/recorder.ts';
 import { runPublication } from '../publish/index.ts';
-import { newId } from '../util/ids.ts';
 import { createLogger } from '../util/logger.ts';
 import { enqueueJob, registerJobHandler, type JobContext } from './queue.ts';
 
@@ -77,34 +76,15 @@ async function postprocess(payload: Record<string, unknown>, ctx: JobContext): P
   enqueueJob('analyze', { recordingId: rec.id });
 }
 
+/** Builds the loudness/motion curve and cut markers the editor timeline draws. */
 async function analyze(payload: Record<string, unknown>, ctx: JobContext): Promise<void> {
   const rec = getRecording(requireString(payload, 'recordingId'));
-  const options: DetectOptions = {
-    sensitivity: typeof payload.sensitivity === 'number' ? payload.sensitivity : undefined,
-    maxCandidates: typeof payload.maxCandidates === 'number' ? payload.maxCandidates : undefined,
-  };
 
   db.prepare("UPDATE recordings SET analysis_status = 'running' WHERE id = ?").run(rec.id);
   try {
     const analysis = await analyzeSource(sourceFor(rec), ctx.signal);
     writeAnalysis(rec.dir, analysis);
-
-    const candidates = detectHighlights(analysis, options);
-    const now = Date.now();
-    const replace = db.transaction(() => {
-      db.prepare('DELETE FROM highlights WHERE recording_id = ?').run(rec.id);
-      const insert = db.prepare(
-        `INSERT INTO highlights (id, recording_id, start_sec, end_sec, peak, score, reason, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      );
-      for (const c of candidates) {
-        insert.run(newId('hl_'), rec.id, c.start, c.end, c.peak, c.score, c.reason, now);
-      }
-    });
-    replace();
-
     db.prepare("UPDATE recordings SET analysis_status = 'ready' WHERE id = ?").run(rec.id);
-    log.info(`recording ${rec.id}: ${candidates.length} highlight candidate(s)`);
   } catch (err) {
     db.prepare("UPDATE recordings SET analysis_status = 'failed' WHERE id = ?").run(rec.id);
     throw err;

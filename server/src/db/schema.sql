@@ -1,6 +1,10 @@
 PRAGMA journal_mode = WAL;
 PRAGMA foreign_keys = ON;
 
+-- Automatic highlight candidates were removed; the analysis now only feeds the
+-- editing timeline. Older deployments still carry the table.
+DROP TABLE IF EXISTS highlights;
+
 CREATE TABLE IF NOT EXISTS streams (
   id           TEXT PRIMARY KEY,
   name         TEXT NOT NULL,
@@ -27,19 +31,6 @@ CREATE TABLE IF NOT EXISTS recordings (
   error           TEXT
 );
 CREATE INDEX IF NOT EXISTS recordings_started ON recordings(started_at DESC);
-
--- Auto-detected clip candidates (the "WSC style" part of the pipeline).
-CREATE TABLE IF NOT EXISTS highlights (
-  id            TEXT PRIMARY KEY,
-  recording_id  TEXT NOT NULL REFERENCES recordings(id) ON DELETE CASCADE,
-  start_sec     REAL NOT NULL,
-  end_sec       REAL NOT NULL,
-  peak          REAL NOT NULL,
-  score         REAL NOT NULL,
-  reason        TEXT NOT NULL,
-  created_at    INTEGER NOT NULL
-);
-CREATE INDEX IF NOT EXISTS highlights_recording ON highlights(recording_id, score DESC);
 
 CREATE TABLE IF NOT EXISTS clips (
   id            TEXT PRIMARY KEY,

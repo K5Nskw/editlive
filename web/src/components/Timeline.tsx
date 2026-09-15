@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Analysis, Highlight, SpriteInfo } from '../types';
+import type { Analysis, SpriteInfo } from '../types';
 import { clamp, formatTimecode } from '../util';
 
 interface TimelineProps {
   duration: number;
   analysis: Analysis | null;
   sprite: SpriteInfo | null;
-  highlights: Highlight[];
   currentTime: number;
   inPoint: number;
   outPoint: number;
@@ -17,12 +16,11 @@ interface TimelineProps {
 const FILMSTRIP_H = 62;
 const CURVE_H = 70;
 
-/** One canvas draws the filmstrip, the excitement curve, cuts and candidates. */
+/** One canvas draws the filmstrip, the loudness/motion curve and the cuts. */
 export function Timeline({
   duration,
   analysis,
   sprite,
-  highlights,
   currentTime,
   inPoint,
   outPoint,
@@ -104,17 +102,10 @@ export function Timeline({
       ctx.fillText(sprite ? 'サムネイル読み込み中…' : '配信終了後にサムネイルを生成します', 10, FILMSTRIP_H / 2 + 4);
     }
 
-    // --- excitement curve ------------------------------------------------
+    // --- loudness / motion curve -----------------------------------------
     const top = FILMSTRIP_H;
     ctx.fillStyle = '#0b0e14';
     ctx.fillRect(0, top, width, CURVE_H);
-
-    for (const hl of highlights) {
-      const x1 = (hl.start / duration) * width;
-      const x2 = (hl.end / duration) * width;
-      ctx.fillStyle = `rgba(123, 92, 255, ${0.1 + hl.score * 0.2})`;
-      ctx.fillRect(x1, top, Math.max(2, x2 - x1), CURVE_H);
-    }
 
     ctx.strokeStyle = 'rgba(255,255,255,0.05)';
     ctx.lineWidth = 1;
@@ -169,7 +160,7 @@ export function Timeline({
     } else {
       ctx.fillStyle = '#5f6b83';
       ctx.font = '11px sans-serif';
-      ctx.fillText('盛り上がり解析は配信終了後に実行されます', 10, top + CURVE_H / 2);
+      ctx.fillText('波形は配信終了後に生成されます', 10, top + CURVE_H / 2);
     }
 
     // --- dim the material outside the selection --------------------------
@@ -178,7 +169,7 @@ export function Timeline({
     const outX = (outPoint / duration) * width;
     ctx.fillRect(0, 0, Math.max(0, inX), height);
     ctx.fillRect(outX, 0, Math.max(0, width - outX), height);
-  }, [analysis, duration, highlights, inPoint, outPoint, sheetsReady, sprite, width]);
+  }, [analysis, duration, inPoint, outPoint, sheetsReady, sprite, width]);
 
   useEffect(() => {
     draw();
@@ -256,13 +247,10 @@ export function Timeline({
       </div>
       <div className="tl-legend">
         <span>
-          <i className="swatch" style={{ background: '#4d8dff' }} /> 盛り上がり度
+          <i className="swatch" style={{ background: '#4d8dff' }} /> 音量と動きの大きさ
         </span>
         <span>
           <i className="swatch" style={{ background: 'rgba(61,220,151,0.8)' }} /> カット検出
-        </span>
-        <span>
-          <i className="swatch" style={{ background: 'rgba(123,92,255,0.7)' }} /> ハイライト候補
         </span>
         <span style={{ marginLeft: 'auto' }}>
           選択範囲 {formatTimecode(inPoint, true)} → {formatTimecode(outPoint, true)} （

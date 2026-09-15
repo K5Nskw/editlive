@@ -3,7 +3,6 @@ import type {
   AppConfig,
   BufferProfile,
   Clip,
-  Highlight,
   Integrations,
   Publication,
   Recording,
@@ -56,10 +55,9 @@ export const api = {
   deleteStream: (id: string) => request<void>(`/api/streams/${id}`, { method: 'DELETE' }),
 
   recordings: () => request<{ recordings: Recording[] }>('/api/recordings'),
-  recording: (id: string) =>
-    request<{ recording: Recording; highlights: Highlight[]; clips: Clip[] }>(`/api/recordings/${id}`),
+  recording: (id: string) => request<{ recording: Recording; clips: Clip[] }>(`/api/recordings/${id}`),
   analysis: (id: string) => request<{ analysis: Analysis }>(`/api/recordings/${id}/analysis`),
-  reanalyze: (id: string, sensitivity: number) => post<{ jobId: string }>(`/api/recordings/${id}/analyze`, { sensitivity }),
+  reanalyze: (id: string) => post<{ jobId: string }>(`/api/recordings/${id}/analyze`),
   renameRecording: (id: string, title: string) =>
     request<{ recording: Recording }>(`/api/recordings/${id}`, { method: 'PATCH', body: JSON.stringify({ title }) }),
   deleteRecording: (id: string) => request<void>(`/api/recordings/${id}`, { method: 'DELETE' }),

@@ -180,12 +180,11 @@ export function Dashboard({ onOpen, onNotify }: DashboardProps) {
                     {badge.label}
                   </span>
                 </div>
-                <div className="hl-meta">
+                <div className="meta-line">
                   {formatDateTime(rec.startedAt)} · {formatTimecode(rec.duration)} · {formatBytes(rec.bytes)}
                 </div>
               </div>
               <div className="row tight">
-                <span className="badge">ハイライト {rec.highlightCount ?? 0}</span>
                 <span className="badge">クリップ {rec.clipCount ?? 0}</span>
               </div>
             </a>

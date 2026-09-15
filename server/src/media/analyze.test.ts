@@ -1,68 +1,62 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { detectHighlights, type AnalysisResult } from './analyze.ts';
+import { buildEnergy } from './analyze.ts';
 import { outputSize } from './render.ts';
 
-function makeAnalysis(energy: number[], scenes: number[] = []): AnalysisResult {
-  return {
-    duration: energy.length,
-    interval: 1,
-    energy,
-    loudness: energy.map((v) => -60 + v * 40),
-    motion: energy.map((v) => v * 0.5),
-    scenes,
-    hasAudio: true,
-    generatedAt: Date.now(),
-  };
-}
+const SILENT = -70;
 
-/** A flat curve with two bursts should yield exactly those two moments. */
-test('detectHighlights finds the loud bursts and nothing else', () => {
-  const energy = new Array<number>(300).fill(0.05);
-  for (let i = 60; i < 75; i++) energy[i] = 0.9;
-  for (let i = 200; i < 212; i++) energy[i] = 0.8;
-
-  const highlights = detectHighlights(makeAnalysis(energy), { sensitivity: 0.5 });
-
-  assert.equal(highlights.length, 2);
-  const [first, second] = [...highlights].sort((a, b) => a.start - b.start);
-  assert.ok(first!.start < 60 && first!.end > 70, `first window ${first!.start}-${first!.end}`);
-  assert.ok(second!.start < 200 && second!.end > 210, `second window ${second!.start}-${second!.end}`);
-});
-
-test('detectHighlights returns nothing for a flat curve', () => {
-  assert.deepEqual(detectHighlights(makeAnalysis(new Array<number>(200).fill(0.4))), []);
-});
-
-test('detectHighlights keeps every window inside the recording', () => {
-  const energy = new Array<number>(40).fill(0.05);
-  for (let i = 0; i < 4; i++) energy[i] = 1;
-  for (let i = 36; i < 40; i++) energy[i] = 0.95;
-
-  for (const hl of detectHighlights(makeAnalysis(energy), { sensitivity: 0.9 })) {
-    assert.ok(hl.start >= 0, `start ${hl.start}`);
-    assert.ok(hl.end <= 40, `end ${hl.end}`);
-    assert.ok(hl.end > hl.start);
+/** A steady level is its own baseline, so nothing should stand out. */
+test('buildEnergy flattens a recording with no dynamics', () => {
+  const loudness = new Array<number>(60).fill(-24);
+  const motion = new Array<number>(60).fill(0.02);
+  for (const value of buildEnergy(loudness, motion, true)) {
+    assert.ok(value <= 0.01, `expected a flat curve, got ${value}`);
   }
 });
 
-test('detectHighlights honours the clip length bounds', () => {
-  const energy = new Array<number>(400).fill(0.05);
-  for (let i = 100; i < 300; i++) energy[i] = 0.9;
+test('buildEnergy lifts the loud stretch above the quiet one', () => {
+  const loudness = new Array<number>(60).fill(-45);
+  const motion = new Array<number>(60).fill(0.02);
+  for (let i = 20; i < 30; i++) loudness[i] = -14;
 
-  for (const hl of detectHighlights(makeAnalysis(energy), { minClipSeconds: 10, maxClipSeconds: 30 })) {
-    const length = hl.end - hl.start;
-    assert.ok(length >= 9.9 && length <= 30.1, `length ${length}`);
+  const energy = buildEnergy(loudness, motion, true);
+  assert.ok(energy[25]! > 0.6, `loud section scored ${energy[25]}`);
+  assert.ok(energy[5]! < 0.1, `quiet section scored ${energy[5]}`);
+});
+
+/** Two feeds 20 dB apart should produce the same shape, not the same level. */
+test('buildEnergy is relative to the recording, not to an absolute level', () => {
+  const quietFeed = new Array<number>(40).fill(-50);
+  const loudFeed = new Array<number>(40).fill(-30);
+  for (let i = 10; i < 20; i++) {
+    quietFeed[i] = -38;
+    loudFeed[i] = -18;
+  }
+  const motion = new Array<number>(40).fill(0.05);
+
+  const a = buildEnergy(quietFeed, motion, true);
+  const b = buildEnergy(loudFeed, motion, true);
+  for (let i = 0; i < a.length; i++) {
+    assert.ok(Math.abs(a[i]! - b[i]!) < 0.001, `index ${i}: ${a[i]} vs ${b[i]}`);
   }
 });
 
-test('a higher sensitivity never returns fewer candidates', () => {
-  const energy = new Array<number>(600).fill(0.1);
-  for (const peak of [50, 150, 250, 350, 450]) {
-    for (let i = peak; i < peak + 8; i++) energy[i] = 0.3 + (peak % 200) / 400;
+test('buildEnergy falls back to motion when the recording has no audio', () => {
+  const loudness = new Array<number>(30).fill(SILENT);
+  const motion = new Array<number>(30).fill(0.01);
+  for (let i = 12; i < 18; i++) motion[i] = 0.6;
+
+  const energy = buildEnergy(loudness, motion, false);
+  assert.ok(energy[15]! > 0.9, `motion peak scored ${energy[15]}`);
+  assert.equal(energy[0], 0);
+});
+
+test('buildEnergy stays within 0..1', () => {
+  const loudness = Array.from({ length: 50 }, (_, i) => (i % 7 === 0 ? -6 : -60));
+  const motion = Array.from({ length: 50 }, (_, i) => (i % 5 === 0 ? 0.9 : 0));
+  for (const value of buildEnergy(loudness, motion, true)) {
+    assert.ok(value >= 0 && value <= 1, `out of range: ${value}`);
   }
-  const analysis = makeAnalysis(energy);
-  assert.ok(detectHighlights(analysis, { sensitivity: 1 }).length >= detectHighlights(analysis, { sensitivity: 0 }).length);
 });
 
 test('outputSize keeps the requested aspect on an even pixel grid', () => {

@@ -46,17 +46,6 @@ export interface Recording {
   posterUrl: string | null;
   sprite: SpriteInfo | null;
   clipCount?: number;
-  highlightCount?: number;
-}
-
-export interface Highlight {
-  id: string;
-  recordingId: string;
-  start: number;
-  end: number;
-  peak: number;
-  score: number;
-  reason: string;
 }
 
 export interface RenderSpec {

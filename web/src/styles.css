@@ -205,17 +205,7 @@ p.sub { color: var(--text-dim); margin: 0 0 22px; }
 .tl-legend span { display: inline-flex; align-items: center; gap: 5px; }
 .swatch { width: 10px; height: 3px; border-radius: 2px; display: inline-block; }
 
-.hl-list { display: grid; gap: 7px; max-height: 320px; overflow-y: auto; }
-.hl-item {
-  display: grid; grid-template-columns: 34px 1fr auto; gap: 10px; align-items: center;
-  padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--bg-elev-2);
-  cursor: pointer; text-align: left; width: 100%;
-}
-.hl-item:hover { border-color: #3a4967; }
-.hl-rank { font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
-.hl-meta { font-size: 11.5px; color: var(--text-faint); }
-.score-bar { width: 52px; height: 4px; border-radius: 2px; background: var(--bg); overflow: hidden; }
-.score-bar > i { display: block; height: 100%; background: linear-gradient(90deg, #4d8dff, #7b5cff); }
+.meta-line { font-size: 11.5px; color: var(--text-faint); }
 
 .aspect-row { display: flex; gap: 6px; flex-wrap: wrap; }
 .chip {

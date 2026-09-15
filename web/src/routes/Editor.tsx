@@ -4,7 +4,7 @@ import { Player } from '../components/Player';
 import { Timeline } from '../components/Timeline';
 import { PublishDialog } from '../components/PublishDialog';
 import { usePolling } from '../hooks';
-import type { Analysis, Aspect, Clip, FitMode, Highlight, Integrations, Publication, Recording, RenderSpec } from '../types';
+import type { Analysis, Aspect, Clip, FitMode, Integrations, Publication, Recording, RenderSpec } from '../types';
 import { clamp, formatBytes, formatDateTime, formatDuration, formatTimecode } from '../util';
 
 const DEFAULT_SPEC: RenderSpec = {
@@ -28,10 +28,10 @@ const ASPECTS: Array<{ value: Aspect; label: string }> = [
 ];
 
 const ANALYSIS_LABEL: Record<Recording['analysisStatus'], string> = {
-  pending: '解析待ち',
-  running: '解析中',
-  ready: '解析済み',
-  failed: '解析失敗',
+  pending: '波形の生成待ち',
+  running: '波形を生成中',
+  ready: '波形あり',
+  failed: '波形の生成に失敗',
 };
 
 interface EditorProps {
@@ -44,7 +44,6 @@ interface EditorProps {
 export function Editor({ recordingId, integrations, onNotify, onBack }: EditorProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [recording, setRecording] = useState<Recording | null>(null);
-  const [highlights, setHighlights] = useState<Highlight[]>([]);
   const [clips, setClips] = useState<Clip[]>([]);
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [publications, setPublications] = useState<Publication[]>([]);
@@ -55,7 +54,6 @@ export function Editor({ recordingId, integrations, onNotify, onBack }: EditorPr
   const [outPoint, setOutPoint] = useState(20);
   const [title, setTitle] = useState('');
   const [spec, setSpec] = useState<RenderSpec>(DEFAULT_SPEC);
-  const [sensitivity, setSensitivity] = useState(0.5);
   const [creating, setCreating] = useState(false);
   const [publishTarget, setPublishTarget] = useState<Clip | null>(null);
   const [notFound, setNotFound] = useState(false);
@@ -66,7 +64,6 @@ export function Editor({ recordingId, integrations, onNotify, onBack }: EditorPr
     try {
       const data = await api.recording(recordingId);
       setRecording(data.recording);
-      setHighlights(data.highlights);
       setClips(data.clips);
       setTitle((prev) => prev || `${data.recording.title} のクリップ`);
     } catch {
@@ -105,15 +102,6 @@ export function Editor({ recordingId, integrations, onNotify, onBack }: EditorPr
     setCurrentTime(time);
     if (video) video.currentTime = time;
   }, []);
-
-  const loadHighlight = useCallback(
-    (hl: Highlight) => {
-      setInPoint(hl.start);
-      setOutPoint(hl.end);
-      seek(hl.start);
-    },
-    [seek],
-  );
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -267,7 +255,6 @@ export function Editor({ recordingId, integrations, onNotify, onBack }: EditorPr
             duration={duration}
             analysis={analysis}
             sprite={recording.sprite}
-            highlights={highlights}
             currentTime={currentTime}
             inPoint={inPoint}
             outPoint={outPoint}
@@ -415,62 +402,32 @@ export function Editor({ recordingId, integrations, onNotify, onBack }: EditorPr
         <div className="stack">
           <div className="card">
             <div className="row" style={{ justifyContent: 'space-between' }}>
-              <h2 style={{ margin: 0 }}>ハイライト候補</h2>
-              <span className="badge">{highlights.length} 件</span>
+              <h2 style={{ margin: 0 }}>タイムラインの波形</h2>
+              <span className={`badge ${recording.analysisStatus === 'failed' ? 'err' : ''}`}>
+                {ANALYSIS_LABEL[recording.analysisStatus]}
+              </span>
             </div>
-            <div className="field" style={{ marginTop: 12 }}>
-              <label>検出の感度: {Math.round(sensitivity * 100)}%</label>
-              <input
-                type="range"
-                min={0}
-                max={1}
-                step={0.05}
-                value={sensitivity}
-                onChange={(e) => setSensitivity(Number(e.target.value))}
-              />
-              <button
-                className="small"
-                style={{ marginTop: 8 }}
-                disabled={recording.status === 'live' || recording.analysisStatus === 'running'}
-                onClick={async () => {
-                  try {
-                    await api.reanalyze(recordingId, sensitivity);
-                    onNotify('再解析を開始しました');
-                    void load();
-                  } catch (err) {
-                    onNotify(err instanceof Error ? err.message : '再解析に失敗しました', true);
-                  }
-                }}
-              >
-                この感度で再解析
-              </button>
-            </div>
-
-            <div className="hl-list" style={{ marginTop: 12 }}>
-              {highlights.length === 0 && (
-                <div className="empty">
-                  {recording.status === 'live'
-                    ? '配信の終了後に自動で解析します。配信中も手動で範囲を選んで書き出せます。'
-                    : recording.analysisStatus === 'running' || recording.analysisStatus === 'pending'
-                      ? '解析中です…'
-                      : '候補が見つかりませんでした。感度を上げて再解析してみてください。'}
-                </div>
-              )}
-              {highlights.map((hl, index) => (
-                <button key={hl.id} className="hl-item" onClick={() => loadHighlight(hl)}>
-                  <span className="hl-rank">#{index + 1}</span>
-                  <span>
-                    <div>{hl.reason}</div>
-                    <div className="hl-meta">
-                      {formatTimecode(hl.start)} → {formatTimecode(hl.end)}（{(hl.end - hl.start).toFixed(0)}秒）
-                    </div>
-                  </span>
-                  <span className="score-bar">
-                    <i style={{ width: `${Math.round(hl.score * 100)}%` }} />
-                  </span>
-                </button>
-              ))}
-            </div>
+            <p className="hint">
+              {recording.status === 'live'
+                ? '配信が終わると、音量と動きの波形・カット位置をタイムラインに描きます。配信中でも範囲を選んで書き出せます。'
+                : '音量と動きの大きさ、カットの位置をタイムラインに重ねて、切りどころを探しやすくします。'}
+            </p>
+            <button
+              className="small"
+              style={{ marginTop: 10 }}
+              disabled={recording.status === 'live' || recording.analysisStatus === 'running'}
+              onClick={async () => {
+                try {
+                  await api.reanalyze(recordingId);
+                  onNotify('波形の作り直しを開始しました');
+                  void load();
+                } catch (err) {
+                  onNotify(err instanceof Error ? err.message : '解析に失敗しました', true);
+                }
+              }}
+            >
+              波形を作り直す
+            </button>
           </div>
 
           <div className="card">
@@ -504,7 +461,7 @@ export function Editor({ recordingId, integrations, onNotify, onBack }: EditorPr
                               : '待機中'}
                       </span>
                     </div>
-                    <div className="hl-meta">
+                    <div className="meta-line">
                       {clip.spec.aspect} · {formatTimecode(clip.start)}→{formatTimecode(clip.end)} ·{' '}
                       {formatDuration(clip.duration)} · {formatBytes(clip.bytes)}
                     </div>
@@ -513,7 +470,7 @@ export function Editor({ recordingId, integrations, onNotify, onBack }: EditorPr
                         <i style={{ width: `${Math.round(clip.progress * 100)}%` }} />
                       </div>
                     )}
-                    {clip.error && <div className="hl-meta" style={{ color: '#ff8b95' }}>{clip.error}</div>}
+                    {clip.error && <div className="meta-line" style={{ color: '#ff8b95' }}>{clip.error}</div>}
                     <div className="row tight" style={{ marginTop: 7 }}>
                       {clip.status === 'ready' && (
                         <>

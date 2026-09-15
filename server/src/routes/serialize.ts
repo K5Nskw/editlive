@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { ClipRow, HighlightRow, JobRow, PublicationRow, RecordingRow, StreamRow } from '../db/types.ts';
+import type { ClipRow, JobRow, PublicationRow, RecordingRow, StreamRow } from '../db/types.ts';
 import { config } from '../config.ts';
 import { isLive, activeRecordingId } from '../ingest/recorder.ts';
 import { clipPublicUrl, clipThumbnailUrl } from '../publish/index.ts';
@@ -58,18 +58,6 @@ function readSprite(row: RecordingRow): (SpriteInfo & { baseUrl: string }) | nul
   } catch {
     return null;
   }
-}
-
-export function highlightDto(row: HighlightRow) {
-  return {
-    id: row.id,
-    recordingId: row.recording_id,
-    start: row.start_sec,
-    end: row.end_sec,
-    peak: row.peak,
-    score: row.score,
-    reason: row.reason,
-  };
 }
 
 export function clipDto(row: ClipRow) {
