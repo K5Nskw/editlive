@@ -96,12 +96,27 @@ export function Dashboard({ onOpen, onNotify }: DashboardProps) {
             <div className="ingest-box stack" style={{ gap: 10 }}>
               <div>
                 <label>サーバー URL</label>
-                <div className="copy-line">
-                  <span className="mono">{stream.ingest.url}</span>
-                  <button className="small" onClick={() => void copy(stream.ingest.url)}>
-                    コピー
-                  </button>
-                </div>
+                {stream.ingest.url ? (
+                  <div className="copy-line">
+                    <span className="mono">{stream.ingest.url}</span>
+                    <button className="small" onClick={() => void copy(stream.ingest.url!)}>
+                      コピー
+                    </button>
+                  </div>
+                ) : (
+                  <div className="notice">
+                    <strong>まだ外部から RTMP を受けられません。</strong>
+                    <p>
+                      Railway の Settings → Networking で <b>TCP Proxy</b> を追加し、転送先のコンテナポートを{' '}
+                      <span className="mono">{config?.rtmpContainerPort ?? 1935}</span> にしてください。発行された
+                      ホストとポートがここに表示されます。
+                    </p>
+                    <p className="hint" style={{ marginTop: 6 }}>
+                      別の場所で終端している場合は、環境変数 <span className="mono">RTMP_PUBLIC_HOST</span> と{' '}
+                      <span className="mono">RTMP_PUBLIC_PORT</span> で直接指定できます。
+                    </p>
+                  </div>
+                )}
               </div>
               <div>
                 <label>ストリームキー</label>

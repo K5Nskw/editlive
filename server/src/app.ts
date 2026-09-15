@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import cookieParser from 'cookie-parser';
-import { config } from './config.ts';
+import { config, ingestEndpoint } from './config.ts';
 import { requireAuth } from './auth.ts';
 import { authRouter } from './routes/auth.ts';
 import { clipsRouter } from './routes/clips.ts';
@@ -37,12 +37,9 @@ export function createApp(): express.Express {
 
   app.get('/api/config', (_req, res) => {
     res.json({
-      ingest: {
-        url: `rtmp://${config.rtmpPublicHost}:${config.rtmpPublicPort}/${config.rtmpApp}`,
-        host: config.rtmpPublicHost,
-        port: config.rtmpPublicPort,
-        app: config.rtmpApp,
-      },
+      ingest: ingestEndpoint(),
+      /** Container port a TCP proxy has to forward to for ingest to work. */
+      rtmpContainerPort: config.rtmpPort,
       publicUrl: config.publicUrl,
       maxRecordingHours: config.maxRecordingSeconds / 3600,
     });

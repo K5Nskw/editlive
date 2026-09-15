@@ -158,6 +158,13 @@ p.sub { color: var(--text-dim); margin: 0 0 22px; }
   background: var(--bg-elev-2); padding: 6px 10px; border-radius: 6px; border: 1px solid var(--line-soft);
 }
 
+.notice {
+  background: rgba(255, 176, 32, 0.08); border: 1px solid rgba(255, 176, 32, 0.3);
+  border-radius: var(--radius-sm); padding: 11px 13px; color: var(--text);
+}
+.notice strong { color: var(--warn); }
+.notice p { margin: 5px 0 0; font-size: 12.5px; color: var(--text-dim); }
+
 .rec-list { display: grid; gap: 10px; }
 .rec-item {
   display: grid; grid-template-columns: 148px 1fr auto; gap: 15px; align-items: center;

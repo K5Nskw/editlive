@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { createApp } from './app.ts';
-import { config } from './config.ts';
+import { config, ingestEndpoint } from './config.ts';
 import { db } from './db/index.ts';
 import type { StreamRow } from './db/types.ts';
 import { registerHandlers } from './jobs/handlers.ts';
@@ -41,8 +41,14 @@ async function main(): Promise<void> {
   const server = app.listen(config.port, () => {
     log.info(`http listening on :${config.port} (${config.publicUrl})`);
     const stream = db.prepare('SELECT * FROM streams ORDER BY created_at LIMIT 1').get() as StreamRow | undefined;
-    if (stream) {
-      log.info(`ingest: rtmp://${config.rtmpPublicHost}:${config.rtmpPublicPort}/${config.rtmpApp} key=${stream.stream_key}`);
+    const ingest = ingestEndpoint();
+    if (ingest && stream) {
+      log.info(`ingest: ${ingest.url} key=${stream.stream_key}`);
+    } else if (!ingest) {
+      log.warn(
+        `no public RTMP endpoint: add a Railway TCP Proxy forwarding to container port ${config.rtmpPort}, ` +
+          'or set RTMP_PUBLIC_HOST / RTMP_PUBLIC_PORT.',
+      );
     }
     if (config.generatedPassword) {
       log.warn(`APP_PASSWORD is not set — this run's login password is "${config.generatedPassword}"`);

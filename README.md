@@ -81,7 +81,9 @@ npm run typecheck
 1. **サービスを作る** — このリポジトリを Railway に繋ぎます。ビルドは Nixpacks（`railway.json` と `nixpacks.toml`）で、ffmpeg と日本語フォントは `nixpacks.toml` の `aptPkgs` で入ります。
 2. **ボリュームを追加する** — 録画とクリップはディスクに置かれます。マウント先はどこでも構いません。Railway が渡す `RAILWAY_VOLUME_MOUNT_PATH` を自動で保存先にします（`DATA_DIR` を設定すればそちらが優先）。ボリュームが無いと再デプロイのたびに録画が消え、起動ログに警告が出ます。
 3. **HTTP ドメインを有効にする** — Settings → Networking → Public Networking で、ターゲットポートに `PORT`（Railway が渡す値）を割り当てます。
-4. **RTMP 用に TCP Proxy を足す** — 同じ Networking 画面で **TCP Proxy** を追加し、コンテナ側ポートに **1935** を指定します。発行された `<host>:<port>` がエンコーダーの接続先になります。Railway は `RAILWAY_TCP_PROXY_DOMAIN` / `RAILWAY_TCP_PROXY_PORT` を環境変数として渡すので、アプリはそれを読んで画面に表示します。手動で上書きしたい場合は `RTMP_PUBLIC_HOST` / `RTMP_PUBLIC_PORT` を設定してください。
+4. **RTMP 用に TCP Proxy を足す** — 同じ Networking 画面で **TCP Proxy** を追加し、コンテナ側ポートに **1935** を指定します。発行された `<host>:<port>` がエンコーダーの接続先になり、画面の「サーバー URL」にそのまま表示されます。
+
+   これを設定するまでは外部から RTMP を受けられないので、画面には URL の代わりに設定手順が出ます（HTTP のドメインは TLS を終端するため RTMP は通りません）。RTMP の待ち受けポートは Railway が渡す `RAILWAY_TCP_APPLICATION_PORT` に自動で追従するので、Proxy の転送先を 1935 以外にしても動きます。別の場所で終端している場合は `RTMP_PUBLIC_HOST` / `RTMP_PUBLIC_PORT` で直接指定できます。
 5. **環境変数を設定する** — 最低限 `APP_PASSWORD` だけ設定すれば動きます。詳細は `.env.example` を参照。
 
 > **注意**: HTTP ドメインは HTTPS を終端しますが、RTMP は TCP Proxy を素通りする平文です。ストリームキーが漏れないよう、キーは共有範囲を絞り、疑わしいときは画面から再発行してください。

@@ -13,7 +13,7 @@ export interface Stream {
   createdAt: number;
   live: boolean;
   liveRecordingId: string | null;
-  ingest: { url: string; key: string };
+  ingest: { url: string | null; key: string };
 }
 
 export interface SpriteInfo {
@@ -124,7 +124,9 @@ export interface Integrations {
 }
 
 export interface AppConfig {
-  ingest: { url: string; host: string; port: number; app: string };
+  /** Null until a TCP proxy (or an explicit override) makes RTMP reachable. */
+  ingest: { url: string; host: string; port: number; app: string } | null;
+  rtmpContainerPort: number;
   publicUrl: string;
   maxRecordingHours: number;
 }

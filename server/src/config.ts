@@ -61,9 +61,30 @@ function resolveFont(): string {
 
 const generatedPassword = env('APP_PASSWORD') ? undefined : crypto.randomBytes(9).toString('base64url');
 
+const publicUrl = (
+  env('PUBLIC_URL') ??
+  env('RAILWAY_PUBLIC_DOMAIN_URL') ??
+  (env('RAILWAY_PUBLIC_DOMAIN') ? `https://${env('RAILWAY_PUBLIC_DOMAIN')}` : undefined) ??
+  `http://localhost:${envInt('PORT', 3000)}`
+).replace(/\/+$/, '');
+
+const servedLocally = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|$)/.test(publicUrl);
+
+// Railway's TCP proxy names the container port it forwards to, so the RTMP
+// listener follows whatever port the proxy was pointed at.
+const rtmpPort = envInt('RTMP_PORT', envInt('RAILWAY_TCP_APPLICATION_PORT', 1935));
+
+/**
+ * The address an encoder publishes to. It is only knowable from a TCP proxy (or
+ * an explicit override): the HTTP domain terminates TLS and cannot carry RTMP,
+ * so printing it would send operators to an endpoint that silently fails.
+ * Null means "no ingest endpoint is reachable from outside yet".
+ */
+const rtmpPublicHost = env('RTMP_PUBLIC_HOST') ?? env('RAILWAY_TCP_PROXY_DOMAIN') ?? (servedLocally ? 'localhost' : null);
+
 export const config = {
   port: envInt('PORT', 3000),
-  rtmpPort: envInt('RTMP_PORT', 1935),
+  rtmpPort,
   rtmpApp: env('RTMP_APP') ?? 'live',
 
   dataDir,
@@ -72,13 +93,11 @@ export const config = {
   tmpDir: path.join(dataDir, 'tmp'),
 
   /** Absolute base URL of this deployment, used for share links and OAuth redirects. */
-  publicUrl: (env('PUBLIC_URL') ?? env('RAILWAY_PUBLIC_DOMAIN_URL') ??
-    (env('RAILWAY_PUBLIC_DOMAIN') ? `https://${env('RAILWAY_PUBLIC_DOMAIN')}` : undefined) ??
-    `http://localhost:${envInt('PORT', 3000)}`).replace(/\/+$/, ''),
+  publicUrl,
 
-  /** Host/port an encoder such as OBS should publish to (Railway TCP proxy). */
-  rtmpPublicHost: env('RTMP_PUBLIC_HOST') ?? env('RAILWAY_TCP_PROXY_DOMAIN') ?? 'localhost',
-  rtmpPublicPort: envInt('RTMP_PUBLIC_PORT', Number(env('RAILWAY_TCP_PROXY_PORT') ?? envInt('RTMP_PORT', 1935))),
+  /** Host/port an encoder such as OBS publishes to; null until a TCP proxy exists. */
+  rtmpPublicHost,
+  rtmpPublicPort: envInt('RTMP_PUBLIC_PORT', Number(env('RAILWAY_TCP_PROXY_PORT') ?? rtmpPort)),
 
   appPassword: env('APP_PASSWORD') ?? generatedPassword!,
   generatedPassword,
@@ -111,3 +130,14 @@ export const config = {
 } as const;
 
 export type Config = typeof config;
+
+/** The RTMP endpoint to hand an encoder, or null when none is reachable yet. */
+export function ingestEndpoint(): { url: string; host: string; port: number; app: string } | null {
+  if (!config.rtmpPublicHost) return null;
+  return {
+    url: `rtmp://${config.rtmpPublicHost}:${config.rtmpPublicPort}/${config.rtmpApp}`,
+    host: config.rtmpPublicHost,
+    port: config.rtmpPublicPort,
+    app: config.rtmpApp,
+  };
+}
