@@ -195,7 +195,7 @@ export function Editor({ recordingId, integrations, onNotify, onBack }: EditorPr
 
   return (
     <div className="page wide">
-      <div className="row" style={{ justifyContent: 'space-between', marginBottom: 16 }}>
+      <div className="row" style={{ justifyContent: 'space-between', marginBottom: 16, alignItems: 'flex-start' }}>
         <div>
           <div className="row tight">
             <button className="ghost" onClick={onBack}>
@@ -216,6 +216,24 @@ export function Editor({ recordingId, integrations, onNotify, onBack }: EditorPr
             {recording.width ? ` · ${recording.width}×${recording.height}` : ''} · {formatBytes(recording.bytes)}
           </p>
         </div>
+        <button
+          className="danger"
+          disabled={recording.status === 'live'}
+          title={recording.status === 'live' ? '配信中は削除できません' : undefined}
+          onClick={async () => {
+            const detail = clips.length > 0 ? `書き出し済みのクリップ ${clips.length} 本も一緒に消えます。` : '';
+            if (!window.confirm(`「${recording.title}」を削除しますか？${detail}この操作は取り消せません。`)) return;
+            try {
+              await api.deleteRecording(recordingId);
+              onNotify('録画を削除しました');
+              onBack();
+            } catch (err) {
+              onNotify(err instanceof Error ? err.message : '削除に失敗しました', true);
+            }
+          }}
+        >
+          この録画を削除
+        </button>
       </div>
 
       {recording.error && <div className="card" style={{ borderColor: '#5a2b35', marginBottom: 16 }}>{recording.error}</div>}

@@ -39,6 +39,19 @@ export function Dashboard({ onOpen, onNotify }: DashboardProps) {
     onNotify((await copyText(value)) ? 'コピーしました' : 'コピーできませんでした');
   }
 
+  async function remove(rec: Recording) {
+    const clips = rec.clipCount ?? 0;
+    const detail = clips > 0 ? `書き出し済みのクリップ ${clips} 本も一緒に消えます。` : '';
+    if (!window.confirm(`「${rec.title}」を削除しますか？${detail}この操作は取り消せません。`)) return;
+    try {
+      await api.deleteRecording(rec.id);
+      setRecordings((prev) => prev.filter((r) => r.id !== rec.id));
+      onNotify('録画を削除しました');
+    } catch (err) {
+      onNotify(err instanceof Error ? err.message : '削除に失敗しました', true);
+    }
+  }
+
   return (
     <div className="page">
       <h1>配信を取り込む</h1>
@@ -218,6 +231,18 @@ export function Dashboard({ onOpen, onNotify }: DashboardProps) {
               </div>
               <div className="row tight">
                 <span className="badge">クリップ {rec.clipCount ?? 0}</span>
+                <button
+                  className="small danger"
+                  disabled={rec.status === 'live'}
+                  title={rec.status === 'live' ? '配信中は削除できません' : '録画を削除'}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    void remove(rec);
+                  }}
+                >
+                  削除
+                </button>
               </div>
             </a>
           );
