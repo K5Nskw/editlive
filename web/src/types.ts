@@ -45,6 +45,7 @@ export interface Recording {
   playbackUrl: string;
   posterUrl: string | null;
   sprite: SpriteInfo | null;
+  live: { segments: number; playlist: boolean; lastSegmentAt: number | null; messages: string[] } | null;
   clipCount?: number;
 }
 

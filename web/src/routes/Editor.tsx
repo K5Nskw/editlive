@@ -269,6 +269,30 @@ export function Editor({ recordingId, integrations, onNotify, onBack }: EditorPr
             </div>
           </div>
 
+          {recording.status === 'live' && recording.live && (
+            <div className={`card live-diag ${recording.live.segments === 0 ? 'warn' : ''}`} style={{ marginTop: 12 }}>
+              <div className="row" style={{ justifyContent: 'space-between' }}>
+                <strong style={{ fontSize: 13 }}>ライブ配信の状態</strong>
+                <span className="badge">{recording.live.segments} セグメント</span>
+              </div>
+              <p className="hint" style={{ marginTop: 6 }}>
+                {recording.live.segments === 0
+                  ? 'まだ再生できる区間がありません。エンコーダーのキーフレーム間隔が長いと、最初の区間が書き出されるまで時間がかかります（OBS なら「出力 → 配信 → キーフレーム間隔 = 2秒」を推奨）。'
+                  : `最終更新 ${
+                      recording.live.lastSegmentAt
+                        ? `${Math.max(0, Math.round((Date.now() - recording.live.lastSegmentAt) / 1000))} 秒前`
+                        : '不明'
+                    } · 映像は届いています。`}
+              </p>
+              {recording.live.messages.length > 0 && (
+                <>
+                  <h3 style={{ marginTop: 10 }}>録画プロセスの出力</h3>
+                  <pre className="log-tail">{recording.live.messages.join('\n')}</pre>
+                </>
+              )}
+            </div>
+          )}
+
           <Timeline
             duration={duration}
             analysis={analysis}

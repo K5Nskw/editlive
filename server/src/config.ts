@@ -118,7 +118,10 @@ export const config = {
 
   /** Serial by default: ffmpeg renders are CPU bound and Railway containers are small. */
   jobConcurrency: envInt('JOB_CONCURRENCY', 1),
-  hlsSegmentSeconds: envInt('HLS_SEGMENT_SECONDS', 4),
+  // ffmpeg can only cut a segment at a keyframe, so this is a floor, not a
+  // guarantee: a low value just means the live preview starts as soon as the
+  // encoder's next keyframe arrives.
+  hlsSegmentSeconds: envInt('HLS_SEGMENT_SECONDS', 2),
   /** Safety valve so a forgotten encoder cannot fill the volume. */
   maxRecordingSeconds: envInt('MAX_RECORDING_HOURS', 6) * 3600,
   thumbIntervalSeconds: envInt('THUMB_INTERVAL_SECONDS', 10),

@@ -21,6 +21,42 @@ interface Active {
 
 const active = new Map<string, Active>(); // keyed by stream id
 
+/**
+ * The tail of what the recorder's ffmpeg said, per recording. It runs with
+ * -loglevel warning, so anything it emits is worth seeing: this is the only
+ * explanation available when a live stream records but will not play.
+ */
+const recorderMessages = new Map<string, string[]>();
+const MESSAGE_LIMIT = 12;
+
+export function recorderLog(recordingId: string): string[] {
+  return recorderMessages.get(recordingId) ?? [];
+}
+
+/** Live progress of the HLS output, which is what the browser plays back. */
+export function liveProgress(dir: string): { segments: number; playlist: boolean; lastSegmentAt: number | null } {
+  let files: string[];
+  try {
+    files = fs.readdirSync(dir);
+  } catch {
+    return { segments: 0, playlist: false, lastSegmentAt: null };
+  }
+  const segments = files.filter((f) => /^seg_\d+\.ts$/.test(f));
+  let newest = 0;
+  for (const file of segments) {
+    try {
+      newest = Math.max(newest, fs.statSync(path.join(dir, file)).mtimeMs);
+    } catch {
+      /* rotated away mid-scan */
+    }
+  }
+  return {
+    segments: segments.length,
+    playlist: files.includes(HLS_PLAYLIST),
+    lastSegmentAt: newest || null,
+  };
+}
+
 export const HLS_PLAYLIST = 'index.m3u8';
 export const SOURCE_FILE = 'source.mp4';
 export const MASTER_FILE = 'master.mp4';
@@ -122,7 +158,16 @@ export function startRecording(stream: StreamRow): RecordingRow | undefined {
 
   // The publisher is registered right after the postPublish handler returns, so
   // give the broadcast a moment before ffmpeg subscribes to it.
-  const proc = spawnFfmpeg(ffmpegArgs(stream.stream_key, dir), (line) => log.debug(`[${recordingId}] ${line}`));
+  recorderMessages.set(recordingId, []);
+  const proc = spawnFfmpeg(ffmpegArgs(stream.stream_key, dir), (line) => {
+    const trimmed = line.trim();
+    if (trimmed === '') return;
+    const messages = recorderMessages.get(recordingId) ?? [];
+    messages.push(trimmed);
+    if (messages.length > MESSAGE_LIMIT) messages.shift();
+    recorderMessages.set(recordingId, messages);
+    log.warn(`[${recordingId}] ${trimmed}`);
+  });
 
   const bytesTimer = setInterval(() => {
     const bytes = directorySize(dir);
@@ -155,6 +200,10 @@ export async function stopRecording(streamId: string): Promise<void> {
 
   const bytes = directorySize(entry.dir);
   const hasMedia = fs.existsSync(path.join(entry.dir, SOURCE_FILE)) || fs.existsSync(path.join(entry.dir, HLS_PLAYLIST));
+  const progress = liveProgress(entry.dir);
+  if (progress.segments === 0) {
+    log.warn(`recording ${entry.recordingId} produced no HLS segments; live preview would have been blank`);
+  }
 
   db.prepare('UPDATE recordings SET status = ?, ended_at = ?, bytes = ?, error = ? WHERE id = ?').run(
     hasMedia ? 'processing' : 'failed',
