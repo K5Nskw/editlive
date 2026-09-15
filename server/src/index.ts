@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import { createApp } from './app.ts';
-import { config, ingestEndpoint } from './config.ts';
+import { config } from './config.ts';
+import { ingestStatus } from './ingest/status.ts';
 import { db } from './db/index.ts';
 import type { StreamRow } from './db/types.ts';
 import { registerHandlers } from './jobs/handlers.ts';
@@ -29,27 +30,42 @@ function seedDefaultStream(): void {
   log.info('created the default ingest stream');
 }
 
+function reportIngest(): void {
+  const { endpoint, problem } = ingestStatus();
+  const stream = db.prepare('SELECT * FROM streams ORDER BY created_at LIMIT 1').get() as StreamRow | undefined;
+
+  if (endpoint) {
+    log.info(`ingest: ${endpoint.url}${stream ? ` key=${stream.stream_key}` : ''}`);
+    return;
+  }
+  if (problem === 'not-listening') {
+    log.warn('RTMP ingest is not listening, so no encoder can publish to this deployment');
+    return;
+  }
+  if (problem === 'proxy-port-conflict') {
+    log.warn(
+      `the TCP proxy forwards to port ${config.requestedRtmpPort}, which is the web server's own port. ` +
+        `Point it at ${config.rtmpPort} instead; RTMP is listening there.`,
+    );
+    return;
+  }
+  log.warn(
+    `no public RTMP endpoint: add a Railway TCP Proxy forwarding to container port ${config.rtmpPort}, ` +
+      'or set RTMP_PUBLIC_HOST / RTMP_PUBLIC_PORT.',
+  );
+}
+
 async function main(): Promise<void> {
   seedDefaultStream();
   registerHandlers();
   recoverInterruptedRecordings();
   startJobRunner();
 
-  await startRtmpServer();
-
+  // The web server comes up first and its port is never shared: losing ingest
+  // costs recordings, losing HTTP costs every way of noticing that.
   const app = createApp();
   const server = app.listen(config.port, () => {
     log.info(`http listening on :${config.port} (${config.publicUrl})`);
-    const stream = db.prepare('SELECT * FROM streams ORDER BY created_at LIMIT 1').get() as StreamRow | undefined;
-    const ingest = ingestEndpoint();
-    if (ingest && stream) {
-      log.info(`ingest: ${ingest.url} key=${stream.stream_key}`);
-    } else if (!ingest) {
-      log.warn(
-        `no public RTMP endpoint: add a Railway TCP Proxy forwarding to container port ${config.rtmpPort}, ` +
-          'or set RTMP_PUBLIC_HOST / RTMP_PUBLIC_PORT.',
-      );
-    }
     if (config.generatedPassword) {
       log.warn(`APP_PASSWORD is not set — this run's login password is "${config.generatedPassword}"`);
     }
@@ -60,6 +76,20 @@ async function main(): Promise<void> {
       );
     }
   });
+
+  server.on('error', (err) => {
+    log.error(`the web server could not listen on :${config.port}`, err);
+    process.exit(1);
+  });
+
+  // Ingest is best-effort: a failure here leaves the editor and every existing
+  // recording reachable instead of crash-looping the deployment.
+  try {
+    await startRtmpServer();
+  } catch (err) {
+    log.error('rtmp ingest failed to start', err);
+  }
+  reportIngest();
 
   let shuttingDown = false;
   const shutdown = async (signal: string) => {

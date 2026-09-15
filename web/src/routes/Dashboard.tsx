@@ -106,11 +106,25 @@ export function Dashboard({ onOpen, onNotify }: DashboardProps) {
                 ) : (
                   <div className="notice">
                     <strong>まだ外部から RTMP を受けられません。</strong>
-                    <p>
-                      Railway の Settings → Networking で <b>TCP Proxy</b> を追加し、転送先のコンテナポートを{' '}
-                      <span className="mono">{config?.rtmpContainerPort ?? 1935}</span> にしてください。発行された
-                      ホストとポートがここに表示されます。
-                    </p>
+                    {config?.ingestProblem === 'not-listening' ? (
+                      <p>
+                        RTMP の待ち受けが起動していません。ポート{' '}
+                        <span className="mono">{config.rtmpContainerPort}</span> が他で使われている可能性があります。
+                        デプロイのログを確認してください。
+                      </p>
+                    ) : config?.ingestProblem === 'proxy-port-conflict' ? (
+                      <p>
+                        TCP Proxy の転送先が Web サーバーと同じポートになっています。転送先を{' '}
+                        <span className="mono">{config.rtmpContainerPort}</span> に変更してください（RTMP は
+                        そちらで待ち受けています）。
+                      </p>
+                    ) : (
+                      <p>
+                        Railway の Settings → Networking で <b>TCP Proxy</b> を追加し、転送先のコンテナポートを{' '}
+                        <span className="mono">{config?.rtmpContainerPort ?? 1935}</span> にしてください。発行された
+                        ホストとポートがここに表示されます。
+                      </p>
+                    )}
                     <p className="hint" style={{ marginTop: 6 }}>
                       別の場所で終端している場合は、環境変数 <span className="mono">RTMP_PUBLIC_HOST</span> と{' '}
                       <span className="mono">RTMP_PUBLIC_PORT</span> で直接指定できます。

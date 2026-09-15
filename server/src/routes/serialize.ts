@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { ClipRow, JobRow, PublicationRow, RecordingRow, StreamRow } from '../db/types.ts';
-import { ingestEndpoint } from '../config.ts';
+import { ingestStatus } from '../ingest/status.ts';
 import { isLive, activeRecordingId } from '../ingest/recorder.ts';
 import { clipPublicUrl, clipThumbnailUrl } from '../publish/index.ts';
 import type { SpriteInfo } from '../media/render.ts';
@@ -18,7 +18,7 @@ export function streamDto(row: StreamRow) {
     ingest: {
       // null while no TCP proxy exists: the UI explains how to add one rather
       // than showing an address that cannot work.
-      url: ingestEndpoint()?.url ?? null,
+      url: ingestStatus().endpoint?.url ?? null,
       key: row.stream_key,
     },
   };

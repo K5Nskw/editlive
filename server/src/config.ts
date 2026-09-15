@@ -70,9 +70,14 @@ const publicUrl = (
 
 const servedLocally = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|$)/.test(publicUrl);
 
+const httpPort = envInt('PORT', 3000);
+
 // Railway's TCP proxy names the container port it forwards to, so the RTMP
-// listener follows whatever port the proxy was pointed at.
-const rtmpPort = envInt('RTMP_PORT', envInt('RAILWAY_TCP_APPLICATION_PORT', 1935));
+// listener follows whatever port the proxy was pointed at — unless that is the
+// port the web server needs. The UI must never lose its port to ingest.
+const requestedRtmpPort = envInt('RTMP_PORT', envInt('RAILWAY_TCP_APPLICATION_PORT', 1935));
+const rtmpPortConflict = requestedRtmpPort === httpPort;
+const rtmpPort = rtmpPortConflict ? (httpPort === 1935 ? 1936 : 1935) : requestedRtmpPort;
 
 /**
  * The address an encoder publishes to. It is only knowable from a TCP proxy (or
@@ -83,8 +88,11 @@ const rtmpPort = envInt('RTMP_PORT', envInt('RAILWAY_TCP_APPLICATION_PORT', 1935
 const rtmpPublicHost = env('RTMP_PUBLIC_HOST') ?? env('RAILWAY_TCP_PROXY_DOMAIN') ?? (servedLocally ? 'localhost' : null);
 
 export const config = {
-  port: envInt('PORT', 3000),
+  port: httpPort,
   rtmpPort,
+  /** True when a TCP proxy points at the web server's port instead of a free one. */
+  rtmpPortConflict,
+  requestedRtmpPort,
   rtmpApp: env('RTMP_APP') ?? 'live',
 
   dataDir,
@@ -130,14 +138,3 @@ export const config = {
 } as const;
 
 export type Config = typeof config;
-
-/** The RTMP endpoint to hand an encoder, or null when none is reachable yet. */
-export function ingestEndpoint(): { url: string; host: string; port: number; app: string } | null {
-  if (!config.rtmpPublicHost) return null;
-  return {
-    url: `rtmp://${config.rtmpPublicHost}:${config.rtmpPublicPort}/${config.rtmpApp}`,
-    host: config.rtmpPublicHost,
-    port: config.rtmpPublicPort,
-    app: config.rtmpApp,
-  };
-}

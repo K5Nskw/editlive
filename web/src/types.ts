@@ -126,6 +126,7 @@ export interface Integrations {
 export interface AppConfig {
   /** Null until a TCP proxy (or an explicit override) makes RTMP reachable. */
   ingest: { url: string; host: string; port: number; app: string } | null;
+  ingestProblem: 'no-proxy' | 'proxy-port-conflict' | 'not-listening' | null;
   rtmpContainerPort: number;
   publicUrl: string;
   maxRecordingHours: number;

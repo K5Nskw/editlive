@@ -1,3 +1,4 @@
+import net from 'node:net';
 import path from 'node:path';
 import NodeMediaServer, { type NmsSession } from 'node-media-server';
 import { config } from '../config.ts';
@@ -14,8 +15,35 @@ function findStreamByKey(key: string): StreamRow | undefined {
 }
 
 let server: NodeMediaServer | undefined;
+let listening = false;
 
-export async function startRtmpServer(): Promise<void> {
+/** Whether ingest is accepting connections right now. */
+export function isIngestListening(): boolean {
+  return listening;
+}
+
+/**
+ * Node-Media-Server reports a bind failure as an async 'error' event on a socket
+ * this module cannot reach, which would take the whole process down. Probing
+ * first keeps a busy port from killing the web server.
+ */
+function portIsFree(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const probe = net.createServer();
+    probe.once('error', () => resolve(false));
+    probe.once('listening', () => probe.close(() => resolve(true)));
+    probe.listen(port, '0.0.0.0');
+  });
+}
+
+/** Resolves whether ingest actually came up; a failure is logged, never fatal. */
+export async function startRtmpServer(): Promise<boolean> {
+  if (!(await portIsFree(config.rtmpPort))) {
+    log.error(`port ${config.rtmpPort} is already in use — RTMP ingest is disabled for this run`);
+    listening = false;
+    return false;
+  }
+
   server = new NodeMediaServer({
     bind: '0.0.0.0',
     rtmp: { port: config.rtmpPort },
@@ -60,10 +88,13 @@ export async function startRtmpServer(): Promise<void> {
   });
 
   await server.run();
+  listening = true;
   log.info(`rtmp ingest listening on :${config.rtmpPort} (app "${config.rtmpApp}")`);
+  return true;
 }
 
 export async function stopRtmpServer(): Promise<void> {
+  listening = false;
   await server?.stop();
   server = undefined;
 }
