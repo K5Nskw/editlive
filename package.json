@@ -2,9 +2,14 @@
   "name": "editlive",
   "private": true,
   "version": "0.1.0",
-  "description": "RTMP ingest -> auto highlight detection -> browser editor -> publish",
-  "workspaces": ["server", "web"],
-  "engines": { "node": ">=22" },
+  "description": "RTMP ingest -> browser editor -> publish",
+  "workspaces": [
+    "server",
+    "web"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "concurrently -n server,web -c cyan,magenta \"npm:dev:server\" \"npm:dev:web\"",
     "dev:server": "npm --workspace server run dev",

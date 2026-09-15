@@ -21,7 +21,11 @@ function envBool(name: string, fallback: boolean): boolean {
   return ['1', 'true', 'yes', 'on'].includes(v.toLowerCase());
 }
 
-const dataDir = path.resolve(env('DATA_DIR') ?? path.join(process.cwd(), 'data'));
+// Railway sets RAILWAY_VOLUME_MOUNT_PATH once a volume is attached, so a
+// deployment persists its recordings without anyone setting DATA_DIR by hand.
+const dataDir = path.resolve(
+  env('DATA_DIR') ?? env('RAILWAY_VOLUME_MOUNT_PATH') ?? path.join(process.cwd(), 'data'),
+);
 
 /** Generated secrets are persisted so sessions survive a restart on a volume. */
 function persistentSecret(file: string, envName: string): string {
@@ -100,6 +104,10 @@ export const config = {
 
   trustProxy: envBool('TRUST_PROXY', true),
   isProduction: (env('NODE_ENV') ?? 'development') === 'production',
+
+  /** True on Railway with no volume attached: everything written is lost on redeploy. */
+  storageIsEphemeral: Boolean(env('RAILWAY_ENVIRONMENT_NAME') ?? env('RAILWAY_ENVIRONMENT')) &&
+    !env('RAILWAY_VOLUME_MOUNT_PATH') && !env('DATA_DIR'),
 } as const;
 
 export type Config = typeof config;

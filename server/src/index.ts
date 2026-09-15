@@ -47,6 +47,12 @@ async function main(): Promise<void> {
     if (config.generatedPassword) {
       log.warn(`APP_PASSWORD is not set — this run's login password is "${config.generatedPassword}"`);
     }
+    if (config.storageIsEphemeral) {
+      log.warn(
+        `no volume attached: recordings in ${config.dataDir} are lost on the next deploy. ` +
+          'Attach a Railway Volume (any mount path) and redeploy.',
+      );
+    }
   });
 
   let shuttingDown = false;

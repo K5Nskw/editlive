@@ -1,0 +1,17 @@
+# Railway builds this repo with Nixpacks (see railway.json).
+
+[phases.setup]
+# ffmpeg does every bit of the media work; fonts-noto-cjk renders Japanese
+# captions (config.ts looks for NotoSansCJK before falling back to a Latin face).
+aptPkgs = ["ffmpeg", "fonts-noto-cjk", "ca-certificates"]
+
+[phases.install]
+# --include=dev is explicit because the build needs tsc and vite, and the
+# builder may already have NODE_ENV=production in the environment.
+cmds = ["npm ci --include=dev --no-audit --no-fund"]
+
+[phases.build]
+cmds = ["npm run build"]
+
+[start]
+cmd = "node server/dist/index.js"
