@@ -29,9 +29,10 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/server ./server
 
+# Recordings and clips live here. On Railway, attach a Volume with its mount
+# path set to /data — a Dockerfile VOLUME instruction is rejected by the builder.
 ENV DATA_DIR=/data
 RUN mkdir -p /data
-VOLUME ["/data"]
 
 EXPOSE 3000 1935
 ENTRYPOINT ["/usr/bin/tini", "--"]
