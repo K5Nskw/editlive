@@ -118,10 +118,18 @@ export const config = {
 
   /** Serial by default: ffmpeg renders are CPU bound and Railway containers are small. */
   jobConcurrency: envInt('JOB_CONCURRENCY', 1),
-  // ffmpeg can only cut a segment at a keyframe, so this is a floor, not a
-  // guarantee: a low value just means the live preview starts as soon as the
-  // encoder's next keyframe arrives.
   hlsSegmentSeconds: envInt('HLS_SEGMENT_SECONDS', 2),
+  /**
+   * Re-encode the live preview instead of copying the incoming stream. ffmpeg
+   * can only cut an HLS segment at a keyframe, so a copied preview is at the
+   * mercy of the encoder's keyframe interval — long ones delay playback, and
+   * very long ones produce no playable segment at all. Encoding lets the
+   * segments be cut on our terms. Set LIVE_PREVIEW=copy to save the CPU when
+   * the encoder is known to send frequent keyframes.
+   */
+  livePreviewEncode: (env('LIVE_PREVIEW') ?? 'encode') !== 'copy',
+  livePreviewHeight: envInt('LIVE_PREVIEW_HEIGHT', 480),
+  livePreviewBitrate: env('LIVE_PREVIEW_BITRATE') ?? '1200k',
   /** Safety valve so a forgotten encoder cannot fill the volume. */
   maxRecordingSeconds: envInt('MAX_RECORDING_HOURS', 6) * 3600,
   thumbIntervalSeconds: envInt('THUMB_INTERVAL_SECONDS', 10),

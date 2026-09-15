@@ -108,8 +108,40 @@ function directorySize(dir: string): number {
   return total;
 }
 
+/**
+ * One ffmpeg, two outputs: the archive is copied so editing keeps the original
+ * quality, while the live preview is re-encoded so its segments can be cut on
+ * a schedule this app controls rather than the encoder's.
+ */
 function ffmpegArgs(streamKey: string, dir: string): string[] {
   const input = `rtmp://127.0.0.1:${config.rtmpPort}/${config.rtmpApp}/${encodeURIComponent(streamKey)}`;
+  const segment = config.hlsSegmentSeconds;
+  const height = config.livePreviewHeight;
+  const width = Math.round((height * 16) / 9 / 2) * 2;
+
+  const preview = config.livePreviewEncode
+    ? [
+        // Optional audio: a video-only stream must not fail the whole recorder.
+        '-map', '0:v:0',
+        '-map', '0:a:0?',
+        '-c:v', 'libx264',
+        '-preset', 'veryfast',
+        '-tune', 'zerolatency',
+        '-profile:v', 'main',
+        '-pix_fmt', 'yuv420p',
+        '-vf', `scale=w=${width}:h=${height}:force_original_aspect_ratio=decrease:force_divisible_by=2`,
+        '-b:v', config.livePreviewBitrate,
+        '-maxrate', config.livePreviewBitrate,
+        '-bufsize', '3000k',
+        // A keyframe exactly every segment, whatever the encoder sends.
+        '-force_key_frames', `expr:gte(t,n_forced*${segment})`,
+        '-sc_threshold', '0',
+        '-c:a', 'aac',
+        '-b:a', '96k',
+        '-ar', '44100',
+      ]
+    : ['-c', 'copy'];
+
   return [
     '-hide_banner',
     '-loglevel', 'warning',
@@ -119,23 +151,26 @@ function ffmpegArgs(streamKey: string, dir: string): string[] {
     '-i', input,
     '-t', String(config.maxRecordingSeconds),
 
-    // Live/scrubbable HLS. An event playlist keeps every segment, so the editor
-    // can seek back through the whole session while it is still being recorded.
+    // Fragmented MP4 capture: the edit source, untranscoded, and intact even if
+    // the process is killed outright. Fragments close on a timer as well as on
+    // keyframes, so a stream with a long keyframe interval still yields a file
+    // that can be read — and clipped from — while it is being written.
     '-c', 'copy',
+    '-movflags', '+frag_keyframe+empty_moov+default_base_moof',
+    '-frag_duration', String(segment * 1_000_000),
+    '-f', 'mp4',
+    path.join(dir, SOURCE_FILE),
+
+    // Live preview. An event playlist keeps every segment, so the editor can
+    // seek back through the whole session while it is still being recorded.
+    ...preview,
     '-f', 'hls',
-    '-hls_time', String(config.hlsSegmentSeconds),
+    '-hls_time', String(segment),
     '-hls_list_size', '0',
     '-hls_playlist_type', 'event',
     '-hls_flags', 'independent_segments',
     '-hls_segment_filename', path.join(dir, 'seg_%05d.ts'),
     path.join(dir, HLS_PLAYLIST),
-
-    // Fragmented MP4 capture: survives an abrupt kill without losing the file,
-    // and is remuxed to a faststart MP4 during post-processing.
-    '-c', 'copy',
-    '-movflags', '+frag_keyframe+empty_moov+default_base_moof',
-    '-f', 'mp4',
-    path.join(dir, SOURCE_FILE),
   ];
 }
 

@@ -167,9 +167,8 @@ export function Dashboard({ onOpen, onNotify }: DashboardProps) {
               </div>
             </div>
             <p className="hint">
-              エンコーダー側は <b>H.264 / AAC</b>、<b>キーフレーム間隔 2 秒</b>に設定してください（OBS なら 設定 →
-              出力 → 配信）。キーフレーム間隔が長いと、配信中のプレビューが再生できるようになるまで時間がかかるか、
-              まったく再生できません。
+              エンコーダー側は <b>H.264 / AAC</b> で送ってください（OBS の既定値どおり）。キーフレーム間隔は 2 秒を
+              推奨しますが、配信中のプレビューはこちらで作り直すので必須ではありません。
             </p>
             <p className="hint">
               最大録画時間 {config?.maxRecordingHours ?? 6} 時間。配信を止めてから約 30 秒後に解析が始まります。

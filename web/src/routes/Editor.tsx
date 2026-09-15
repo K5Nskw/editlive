@@ -277,7 +277,7 @@ export function Editor({ recordingId, integrations, onNotify, onBack }: EditorPr
               </div>
               <p className="hint" style={{ marginTop: 6 }}>
                 {recording.live.segments === 0
-                  ? 'まだ再生できる区間がありません。エンコーダーのキーフレーム間隔が長いと、最初の区間が書き出されるまで時間がかかります（OBS なら「出力 → 配信 → キーフレーム間隔 = 2秒」を推奨）。'
+                  ? 'まだ再生できる区間がありません。配信開始から数秒で最初の区間ができます。しばらく待っても 0 のままなら、下の録画プロセスの出力を確認してください。'
                   : `最終更新 ${
                       recording.live.lastSegmentAt
                         ? `${Math.max(0, Math.round((Date.now() - recording.live.lastSegmentAt) / 1000))} 秒前`
