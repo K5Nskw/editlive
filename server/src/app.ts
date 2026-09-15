@@ -43,6 +43,8 @@ export function createApp(): express.Express {
       ingestProblem: ingest.problem,
       /** Container port a TCP proxy has to forward to for ingest to work. */
       rtmpContainerPort: config.rtmpPort,
+      /** Container port the web server itself listens on, for comparison. */
+      httpContainerPort: config.port,
       publicUrl: config.publicUrl,
       maxRecordingHours: config.maxRecordingSeconds / 3600,
     });

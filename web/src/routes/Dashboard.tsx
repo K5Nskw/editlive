@@ -114,9 +114,12 @@ export function Dashboard({ onOpen, onNotify }: DashboardProps) {
                       </p>
                     ) : config?.ingestProblem === 'proxy-port-conflict' ? (
                       <p>
-                        TCP Proxy の転送先が Web サーバーと同じポートになっています。転送先を{' '}
-                        <span className="mono">{config.rtmpContainerPort}</span> に変更してください（RTMP は
-                        そちらで待ち受けています）。
+                        TCP Proxy の転送先と Web サーバーがどちらもポート{' '}
+                        <span className="mono">{config.httpContainerPort}</span> を使おうとしているため、RTMP は{' '}
+                        <span className="mono">{config.rtmpContainerPort}</span> に退避しています。どちらかで直せます
+                        — TCP Proxy の転送先を <span className="mono">{config.rtmpContainerPort}</span> に変える、
+                        または Web サーバーに専用ポートを与える（<span className="mono">PORT=3000</span> を設定し、
+                        HTTP ドメインの target port も 3000 にする）と TCP Proxy は 1935 のままで済みます。
                       </p>
                     ) : (
                       <p>

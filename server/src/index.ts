@@ -44,8 +44,10 @@ function reportIngest(): void {
   }
   if (problem === 'proxy-port-conflict') {
     log.warn(
-      `the TCP proxy forwards to port ${config.requestedRtmpPort}, which is the web server's own port. ` +
-        `Point it at ${config.rtmpPort} instead; RTMP is listening there.`,
+      `the TCP proxy and the web server both want port ${config.requestedRtmpPort}, so RTMP moved to ` +
+        `${config.rtmpPort}. Fix it either way: point the TCP proxy at ${config.rtmpPort}, or give the web ` +
+        `server a port of its own (set PORT=3000 and the HTTP domain's target port to 3000) and leave the ` +
+        'TCP proxy on 1935.',
     );
     return;
   }

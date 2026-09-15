@@ -128,6 +128,7 @@ export interface AppConfig {
   ingest: { url: string; host: string; port: number; app: string } | null;
   ingestProblem: 'no-proxy' | 'proxy-port-conflict' | 'not-listening' | null;
   rtmpContainerPort: number;
+  httpContainerPort: number;
   publicUrl: string;
   maxRecordingHours: number;
 }
