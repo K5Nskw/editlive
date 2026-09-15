@@ -2,10 +2,18 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Analysis, SpriteInfo } from '../types';
 import { clamp, formatTimecode } from '../util';
 
+/** The filmstrip that grows during a broadcast, one image per interval. */
+export interface LiveFilmstrip {
+  count: number;
+  interval: number;
+  baseUrl: string;
+}
+
 interface TimelineProps {
   duration: number;
   analysis: Analysis | null;
   sprite: SpriteInfo | null;
+  liveFilmstrip: LiveFilmstrip | null;
   currentTime: number;
   inPoint: number;
   outPoint: number;
@@ -21,6 +29,7 @@ export function Timeline({
   duration,
   analysis,
   sprite,
+  liveFilmstrip,
   currentTime,
   inPoint,
   outPoint,
@@ -30,7 +39,9 @@ export function Timeline({
   const boxRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sheetsRef = useRef<HTMLImageElement[]>([]);
+  const liveTilesRef = useRef<Map<number, HTMLImageElement>>(new Map());
   const [sheetsReady, setSheetsReady] = useState(0);
+  const [tilesReady, setTilesReady] = useState(0);
   const [width, setWidth] = useState(0);
   const dragRef = useRef<'in' | 'out' | 'seek' | null>(null);
 
@@ -64,6 +75,29 @@ export function Timeline({
     };
   }, [sprite]);
 
+  useEffect(() => {
+    liveTilesRef.current = new Map();
+    setTilesReady(0);
+  }, [liveFilmstrip?.baseUrl]);
+
+  useEffect(() => {
+    if (!liveFilmstrip) return;
+    let cancelled = false;
+    for (let index = 0; index < liveFilmstrip.count; index++) {
+      if (liveTilesRef.current.has(index)) continue;
+      const img = new Image();
+      liveTilesRef.current.set(index, img);
+      img.src = `${liveFilmstrip.baseUrl}thumb_${String(index).padStart(6, '0')}.jpg`;
+      img.onload = () => {
+        if (!cancelled) setTilesReady((n) => n + 1);
+      };
+      img.onerror = () => liveTilesRef.current.delete(index);
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [liveFilmstrip]);
+
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas || width <= 0 || duration <= 0) return;
@@ -96,10 +130,28 @@ export function Timeline({
       }
       ctx.fillStyle = 'rgba(11,14,20,0.35)';
       ctx.fillRect(0, 0, width, FILMSTRIP_H);
+    } else if (liveFilmstrip && tilesReady > 0) {
+      // Live: one image per interval, appearing as the broadcast goes on.
+      let drawn = 0;
+      for (let index = 0; index < liveFilmstrip.count; index++) {
+        const tile = liveTilesRef.current.get(index);
+        if (!tile?.complete || tile.naturalWidth === 0) continue;
+        const x = ((index * liveFilmstrip.interval) / duration) * width;
+        const drawW = Math.max(2, (liveFilmstrip.interval / duration) * width);
+        ctx.drawImage(tile, x, 0, drawW + 1, FILMSTRIP_H);
+        drawn += 1;
+      }
+      ctx.fillStyle = 'rgba(11,14,20,0.35)';
+      ctx.fillRect(0, 0, width, FILMSTRIP_H);
+      if (drawn === 0) {
+        ctx.fillStyle = '#5f6b83';
+        ctx.font = '11px sans-serif';
+        ctx.fillText('サムネイルを生成中…', 10, FILMSTRIP_H / 2 + 4);
+      }
     } else {
       ctx.fillStyle = '#5f6b83';
       ctx.font = '11px sans-serif';
-      ctx.fillText(sprite ? 'サムネイル読み込み中…' : '配信終了後にサムネイルを生成します', 10, FILMSTRIP_H / 2 + 4);
+      ctx.fillText(sprite ? 'サムネイル読み込み中…' : 'サムネイルを生成中…', 10, FILMSTRIP_H / 2 + 4);
     }
 
     // --- loudness / motion curve -----------------------------------------
@@ -169,7 +221,7 @@ export function Timeline({
     const outX = (outPoint / duration) * width;
     ctx.fillRect(0, 0, Math.max(0, inX), height);
     ctx.fillRect(outX, 0, Math.max(0, width - outX), height);
-  }, [analysis, duration, inPoint, outPoint, sheetsReady, sprite, width]);
+  }, [analysis, duration, inPoint, outPoint, liveFilmstrip, sheetsReady, sprite, tilesReady, width]);
 
   useEffect(() => {
     draw();

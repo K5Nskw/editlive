@@ -3,7 +3,7 @@ import path from 'node:path';
 import { config } from '../config.ts';
 import { db } from '../db/index.ts';
 import type { RecordingRow, StreamRow } from '../db/types.ts';
-import { spawnFfmpeg, type LongRunningProcess } from '../media/ffmpeg.ts';
+import { runFfmpeg, spawnFfmpeg, type LongRunningProcess } from '../media/ffmpeg.ts';
 import { enqueueJob } from '../jobs/queue.ts';
 import { newId } from '../util/ids.ts';
 import { createLogger } from '../util/logger.ts';
@@ -17,7 +17,10 @@ interface Active {
   proc: LongRunningProcess;
   startedAt: number;
   bytesTimer: NodeJS.Timeout;
+  thumbTimer: NodeJS.Timeout;
 }
+
+export const THUMB_WIDTH = 160;
 
 const active = new Map<string, Active>(); // keyed by stream id
 
@@ -33,13 +36,57 @@ export function recorderLog(recordingId: string): string[] {
   return recorderMessages.get(recordingId) ?? [];
 }
 
+/**
+ * Grab one frame per thumbnail interval out of the preview segments as they
+ * land, so the editor timeline has a filmstrip to navigate by during the
+ * broadcast rather than only after it ends. A segment is small and already on
+ * disk, so this costs one decoded frame every few seconds.
+ */
+async function captureLiveThumbs(dir: string, signal: AbortSignal): Promise<void> {
+  const perThumb = Math.max(1, Math.round(config.thumbIntervalSeconds / config.hlsSegmentSeconds));
+  const segments = fs
+    .readdirSync(dir)
+    .filter((f) => /^seg_\d+\.ts$/.test(f))
+    .sort();
+  // The newest segment may still be growing, so never read the last one.
+  const usable = segments.length - 1;
+
+  for (let index = 0; index * perThumb < usable; index++) {
+    const out = path.join(dir, `thumb_${String(index).padStart(6, '0')}.jpg`);
+    if (fs.existsSync(out)) continue;
+    const segment = segments[index * perThumb];
+    if (!segment) continue;
+    try {
+      await runFfmpeg(
+        [
+          '-hide_banner', '-nostdin', '-v', 'error', '-y',
+          '-i', path.join(dir, segment),
+          '-frames:v', '1',
+          '-vf', `scale=${THUMB_WIDTH}:-2`,
+          '-qscale:v', '6',
+          out,
+        ],
+        { signal },
+      );
+    } catch (err) {
+      log.debug(`live thumbnail ${index} failed`, err);
+      return;
+    }
+  }
+}
+
 /** Live progress of the HLS output, which is what the browser plays back. */
-export function liveProgress(dir: string): { segments: number; playlist: boolean; lastSegmentAt: number | null } {
+export function liveProgress(dir: string): {
+  segments: number;
+  playlist: boolean;
+  lastSegmentAt: number | null;
+  thumbs: number;
+} {
   let files: string[];
   try {
     files = fs.readdirSync(dir);
   } catch {
-    return { segments: 0, playlist: false, lastSegmentAt: null };
+    return { segments: 0, playlist: false, lastSegmentAt: null, thumbs: 0 };
   }
   const segments = files.filter((f) => /^seg_\d+\.ts$/.test(f));
   let newest = 0;
@@ -54,6 +101,7 @@ export function liveProgress(dir: string): { segments: number; playlist: boolean
     segments: segments.length,
     playlist: files.includes(HLS_PLAYLIST),
     lastSegmentAt: newest || null,
+    thumbs: files.filter((f) => /^thumb_\d+\.jpg$/.test(f)).length,
   };
 }
 
@@ -210,7 +258,20 @@ export function startRecording(stream: StreamRow): RecordingRow | undefined {
   }, 10_000);
   bytesTimer.unref();
 
-  active.set(stream.id, { recordingId, streamId: stream.id, dir, proc, startedAt: now, bytesTimer });
+  const thumbs = new AbortController();
+  let capturing = false;
+  const thumbTimer = setInterval(() => {
+    if (capturing) return;
+    capturing = true;
+    void captureLiveThumbs(dir, thumbs.signal)
+      .catch((err) => log.debug(`live thumbnails for ${recordingId} stopped`, err))
+      .finally(() => {
+        capturing = false;
+      });
+  }, Math.max(5, config.thumbIntervalSeconds) * 1000);
+  thumbTimer.unref();
+
+  active.set(stream.id, { recordingId, streamId: stream.id, dir, proc, startedAt: now, bytesTimer, thumbTimer });
 
   void proc.exited.then((code) => {
     const entry = active.get(stream.id);
@@ -230,6 +291,7 @@ export async function stopRecording(streamId: string): Promise<void> {
   if (!entry) return;
   active.delete(streamId);
   clearInterval(entry.bytesTimer);
+  clearInterval(entry.thumbTimer);
 
   await entry.proc.stop();
 

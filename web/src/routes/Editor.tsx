@@ -297,6 +297,15 @@ export function Editor({ recordingId, integrations, onNotify, onBack }: EditorPr
             duration={duration}
             analysis={analysis}
             sprite={recording.sprite}
+            liveFilmstrip={
+              recording.live && recording.live.thumbs > 0
+                ? {
+                    count: recording.live.thumbs,
+                    interval: recording.live.thumbInterval,
+                    baseUrl: recording.live.baseUrl,
+                  }
+                : null
+            }
             currentTime={currentTime}
             inPoint={inPoint}
             outPoint={outPoint}

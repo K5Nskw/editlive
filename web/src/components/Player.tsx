@@ -45,7 +45,14 @@ export function Player({ src, poster, videoRef, onTimeUpdate, onDuration }: Play
           setWaiting('このブラウザは HLS 再生に対応していません');
           return;
         }
-        const hls = new Hls({ enableWorker: true, lowLatencyMode: false, backBufferLength: 90 });
+        const hls = new Hls({
+          enableWorker: true,
+          lowLatencyMode: false,
+          // This is an editing surface, not a viewer: keep everything already
+          // downloaded so scrubbing back through the broadcast is immediate
+          // instead of re-fetching what was just discarded.
+          backBufferLength: Infinity,
+        });
         hlsRef.current = hls;
 
         hls.on(Hls.Events.MANIFEST_PARSED, () => {

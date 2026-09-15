@@ -1,8 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { ClipRow, JobRow, PublicationRow, RecordingRow, StreamRow } from '../db/types.ts';
+import { config } from '../config.ts';
 import { ingestStatus } from '../ingest/status.ts';
-import { activeRecordingId, isLive, liveProgress, recorderLog } from '../ingest/recorder.ts';
+import { activeRecordingId, isLive, liveProgress, recorderLog, THUMB_WIDTH } from '../ingest/recorder.ts';
 import { clipPublicUrl, clipThumbnailUrl } from '../publish/index.ts';
 import type { SpriteInfo } from '../media/render.ts';
 
@@ -46,7 +47,18 @@ export function recordingDto(row: RecordingRow, stream?: StreamRow) {
     // While live, the browser plays the HLS output; how far along it is and
     // what ffmpeg has complained about are the only way to tell a stalled
     // recorder from a player problem.
-    live: row.status === 'live' ? { ...liveProgress(row.dir), messages: recorderLog(row.id) } : null,
+    live:
+      row.status === 'live'
+        ? {
+            ...liveProgress(row.dir),
+            messages: recorderLog(row.id),
+            // A filmstrip that grows with the broadcast, so the timeline is
+            // navigable before the sprite sheet is built at the end.
+            thumbInterval: config.thumbIntervalSeconds,
+            thumbWidth: THUMB_WIDTH,
+            baseUrl: `/media/recordings/${row.id}/`,
+          }
+        : null,
   };
 }
 

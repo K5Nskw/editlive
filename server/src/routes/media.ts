@@ -6,7 +6,8 @@ import type { ClipRow, RecordingRow } from '../db/types.ts';
 import { requireAuth } from '../auth.ts';
 
 /** Only the artefacts the editor needs; never an arbitrary path inside the volume. */
-const ALLOWED_RECORDING_FILES = /^(index\.m3u8|master\.mp4|source\.mp4|poster\.jpg|analysis\.json|sprite\.json|sprite_\d+\.jpg|seg_\d+\.ts)$/;
+const ALLOWED_RECORDING_FILES =
+  /^(index\.m3u8|master\.mp4|source\.mp4|poster\.jpg|analysis\.json|sprite\.json|sprite_\d+\.jpg|thumb_\d+\.jpg|seg_\d+\.ts)$/;
 
 const CONTENT_TYPES: Record<string, string> = {
   '.m3u8': 'application/vnd.apple.mpegurl',
