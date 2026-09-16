@@ -7,6 +7,7 @@ import type { StreamRow } from './db/types.ts';
 import { registerHandlers } from './jobs/handlers.ts';
 import { startJobRunner, stopJobRunner } from './jobs/queue.ts';
 import { recoverInterruptedRecordings, stopAll } from './ingest/recorder.ts';
+import { reconcileClips } from './util/storage.ts';
 import { startRtmpServer, stopRtmpServer } from './ingest/rtmp.ts';
 import { newId, newStreamKey } from './util/ids.ts';
 import { createLogger } from './util/logger.ts';
@@ -61,6 +62,7 @@ async function main(): Promise<void> {
   seedDefaultStream();
   registerHandlers();
   recoverInterruptedRecordings();
+  reconcileClips();
   startJobRunner();
 
   // The web server comes up first and its port is never shared: losing ingest

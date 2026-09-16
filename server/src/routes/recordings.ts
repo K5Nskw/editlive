@@ -108,6 +108,10 @@ recordingsRouter.delete('/:id', (req, res) => {
   if (keepClips) {
     // Remember where they came from before the foreign key is cleared.
     db.prepare('UPDATE clips SET source_title = COALESCE(source_title, ?) WHERE recording_id = ?').run(rec.title, rec.id);
+  } else {
+    // The foreign key only clears the link now that clips outlive recordings,
+    // so deleting them is an explicit step; publications still cascade off it.
+    db.prepare('DELETE FROM clips WHERE recording_id = ?').run(rec.id);
   }
   db.prepare('DELETE FROM recordings WHERE id = ?').run(rec.id);
   res.status(204).end();

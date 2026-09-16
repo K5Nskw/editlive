@@ -32,3 +32,24 @@ export function removeRecordingFiles(recordingId: string, options: { keepClips?:
   }
   if (rec) removeQuietly(rec.dir);
 }
+
+/**
+ * Drop clips that claim to be finished but whose file is gone. Earlier versions
+ * deleted a recording's clip files while leaving the rows behind, so a
+ * deployment can be carrying entries that list and link to nothing. Rows still
+ * waiting on a render are left alone — they have no file yet by definition.
+ */
+export function reconcileClips(): void {
+  const stale = db
+    .prepare("SELECT * FROM clips WHERE status = 'ready' AND file_path IS NOT NULL")
+    .all() as ClipRow[];
+  const missing = stale.filter((clip) => !fs.existsSync(clip.file_path!));
+  if (missing.length === 0) return;
+
+  const remove = db.prepare('DELETE FROM clips WHERE id = ?');
+  for (const clip of missing) {
+    removeClipFiles(clip);
+    remove.run(clip.id);
+  }
+  log.warn(`removed ${missing.length} clip(s) whose rendered file no longer exists`);
+}

@@ -9,7 +9,7 @@
     "build": "tsc -p tsconfig.json && node scripts/copy-assets.mjs",
     "start": "node --enable-source-maps dist/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --experimental-strip-types --no-warnings --test src/media/analyze.test.ts"
+    "test": "node --experimental-strip-types --no-warnings --test src/media/analyze.test.ts src/db/schema.test.ts"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",

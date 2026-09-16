@@ -79,9 +79,11 @@ streamsRouter.delete('/:id', (req, res) => {
     res.status(409).json({ error: '受信中の入力は削除できません' });
     return;
   }
-  // Rows cascade, but the media on disk has to be removed explicitly.
+  // Recordings cascade off the stream, but the media on disk and the clips do
+  // not: a clip's foreign key only detaches it, so removing it is explicit.
   const recordings = db.prepare('SELECT id FROM recordings WHERE stream_id = ?').all(stream.id) as Array<{ id: string }>;
   for (const rec of recordings) removeRecordingFiles(rec.id);
+  db.prepare('DELETE FROM clips WHERE recording_id IN (SELECT id FROM recordings WHERE stream_id = ?)').run(stream.id);
   db.prepare('DELETE FROM streams WHERE id = ?').run(stream.id);
   res.status(204).end();
 });
