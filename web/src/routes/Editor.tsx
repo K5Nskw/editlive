@@ -14,8 +14,8 @@ const DEFAULT_SPEC: RenderSpec = {
   focusY: 0.5,
   resolution: 1080,
   mute: false,
-  fadeIn: 0.3,
-  fadeOut: 0.4,
+  fadeIn: 0,
+  fadeOut: 0,
   overlayText: '',
   overlayPosition: 'bottom',
 };
@@ -508,9 +508,7 @@ export function Editor({ recordingId, integrations, onNotify, onBack }: EditorPr
                 />
                 音声を消す
               </label>
-              <span className="hint" style={{ marginTop: 0 }}>
-                フェード {spec.fadeIn}s / {spec.fadeOut}s
-              </span>
+
             </div>
 
             <div className="row" style={{ marginTop: 16, justifyContent: 'space-between' }}>

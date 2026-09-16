@@ -34,8 +34,10 @@ export const DEFAULT_SPEC: RenderSpec = {
   focusY: 0.5,
   resolution: 1080,
   mute: false,
-  fadeIn: 0.3,
-  fadeOut: 0.4,
+  // A clip is a cut out of a broadcast, not a standalone film: opening on
+  // black hides the moment it was made for. Still honoured when asked for.
+  fadeIn: 0,
+  fadeOut: 0,
   overlayText: '',
   overlayPosition: 'bottom',
 };
