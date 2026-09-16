@@ -22,7 +22,23 @@ interface TimelineProps {
 }
 
 const FILMSTRIP_H = 62;
-const CURVE_H = 70;
+const CURVE_H = 58;
+const RULER_H = 18;
+const TOTAL_H = FILMSTRIP_H + CURVE_H + RULER_H;
+
+/** Tick spacing that keeps labels readable at any zoom level. */
+function tickStep(duration: number, width: number): number {
+  const target = Math.max(60, width / 8);
+  const rough = (duration * target) / Math.max(width, 1);
+  const steps = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600];
+  return steps.find((s) => s >= rough) ?? 3600;
+}
+
+function tickLabel(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
 
 /** One canvas draws the filmstrip, the loudness/motion curve and the cuts. */
 export function Timeline({
@@ -102,7 +118,7 @@ export function Timeline({
     const canvas = canvasRef.current;
     if (!canvas || width <= 0 || duration <= 0) return;
     const dpr = window.devicePixelRatio || 1;
-    const height = FILMSTRIP_H + CURVE_H;
+    const height = TOTAL_H;
     canvas.width = Math.round(width * dpr);
     canvas.height = Math.round(height * dpr);
     const ctx = canvas.getContext('2d');
@@ -215,6 +231,32 @@ export function Timeline({
       ctx.fillText('波形は配信終了後に生成されます', 10, top + CURVE_H / 2);
     }
 
+    // --- time ruler ------------------------------------------------------
+    const rulerTop = FILMSTRIP_H + CURVE_H;
+    ctx.fillStyle = '#0f1420';
+    ctx.fillRect(0, rulerTop, width, RULER_H);
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.beginPath();
+    ctx.moveTo(0, rulerTop + 0.5);
+    ctx.lineTo(width, rulerTop + 0.5);
+    ctx.stroke();
+
+    const step = tickStep(duration, width);
+    ctx.font = '10px ui-monospace, monospace';
+    ctx.textBaseline = 'middle';
+    for (let t = 0; t <= duration; t += step) {
+      const x = (t / duration) * width;
+      ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+      ctx.beginPath();
+      ctx.moveTo(Math.round(x) + 0.5, rulerTop);
+      ctx.lineTo(Math.round(x) + 0.5, rulerTop + 5);
+      ctx.stroke();
+      if (x < width - 28) {
+        ctx.fillStyle = '#8e9ab4';
+        ctx.fillText(tickLabel(t), x + 4, rulerTop + RULER_H / 2 + 1);
+      }
+    }
+
     // --- dim the material outside the selection --------------------------
     ctx.fillStyle = 'rgba(6,9,15,0.62)';
     const inX = (inPoint / duration) * width;
@@ -268,14 +310,14 @@ export function Timeline({
       <div
         className="timeline"
         ref={boxRef}
-        style={{ height: FILMSTRIP_H + CURVE_H }}
+        style={{ height: TOTAL_H }}
         onPointerDown={(e) => {
           if ((e.target as HTMLElement).classList.contains('tl-handle')) return;
           dragRef.current = 'seek';
           onSeek(timeAt(e.clientX));
         }}
       >
-        <canvas ref={canvasRef} style={{ height: FILMSTRIP_H + CURVE_H }} />
+        <canvas ref={canvasRef} style={{ height: TOTAL_H }} />
         <div className="tl-selection" style={{ left: pct(inPoint), width: pct(outPoint - inPoint) }} />
         <div
           className="tl-handle"

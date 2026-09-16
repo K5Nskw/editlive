@@ -70,7 +70,13 @@ export function Editor({ recordingId, integrations, onNotify, onBack }: EditorPr
 
   const live = recording?.status === 'live';
   const reviewing = live && mode === 'review';
-  const duration = recording && recording.duration > 0 ? recording.duration : videoDuration;
+  // The server measures the broadcast from the playlist it is writing; the
+  // video element's own duration is unreliable for a live stream and taking it
+  // as zero would leave the timeline with nothing to lay out.
+  const duration =
+    recording && recording.duration > 0
+      ? recording.duration
+      : (recording?.live?.seconds ?? 0) || videoDuration;
   const playbackSrc = reviewing && recording?.live ? `${recording.live.archiveUrl}?v=${reviewToken}` : recording?.playbackUrl ?? '';
 
   const load = useCallback(async () => {
@@ -332,7 +338,12 @@ export function Editor({ recordingId, integrations, onNotify, onBack }: EditorPr
             <div className={`card live-diag ${recording.live.segments === 0 ? 'warn' : ''}`} style={{ marginTop: 12 }}>
               <div className="row" style={{ justifyContent: 'space-between' }}>
                 <strong style={{ fontSize: 13 }}>ライブ配信の状態</strong>
-                <span className="badge">{recording.live.segments} セグメント</span>
+                <span className="row tight">
+                  <span className="badge">{recording.live.segments} セグメント</span>
+                  <span className="badge">{formatTimecode(recording.live.seconds)} 収録</span>
+                  <span className="badge">サムネイル {recording.live.thumbs}</span>
+                  <span className="badge">波形 {analysis?.energy.length ?? 0} 秒</span>
+                </span>
               </div>
               <p className="hint" style={{ marginTop: 6 }}>
                 {recording.live.segments === 0

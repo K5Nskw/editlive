@@ -128,17 +128,40 @@ async function analyseLiveAudio(recordingId: string, dir: string, signal: AbortS
 }
 
 /** Live progress of the HLS output, which is what the browser plays back. */
+/** Total duration written so far, summed from the playlist's own EXTINF tags. */
+function playlistSeconds(dir: string): number {
+  try {
+    const text = fs.readFileSync(path.join(dir, HLS_PLAYLIST), 'utf8');
+    let total = 0;
+    for (const line of text.split('\n')) {
+      if (!line.startsWith('#EXTINF:')) continue;
+      const value = Number.parseFloat(line.slice('#EXTINF:'.length));
+      if (Number.isFinite(value)) total += value;
+    }
+    return Math.round(total * 100) / 100;
+  } catch {
+    return 0;
+  }
+}
+
 export function liveProgress(dir: string): {
   segments: number;
   playlist: boolean;
   lastSegmentAt: number | null;
   thumbs: number;
+  /**
+   * How much material the editor can work with. The timeline needs this from
+   * the server: while the broadcast runs, the video element's own duration
+   * depends on how the browser treats a live stream, and a missing or infinite
+   * value collapses the whole timeline to zero width.
+   */
+  seconds: number;
 } {
   let files: string[];
   try {
     files = fs.readdirSync(dir);
   } catch {
-    return { segments: 0, playlist: false, lastSegmentAt: null, thumbs: 0 };
+    return { segments: 0, playlist: false, lastSegmentAt: null, thumbs: 0, seconds: 0 };
   }
   const segments = files.filter((f) => /^seg_\d+\.ts$/.test(f));
   let newest = 0;
@@ -154,6 +177,7 @@ export function liveProgress(dir: string): {
     playlist: files.includes(HLS_PLAYLIST),
     lastSegmentAt: newest || null,
     thumbs: files.filter((f) => /^thumb_\d+\.jpg$/.test(f)).length,
+    seconds: playlistSeconds(dir),
   };
 }
 

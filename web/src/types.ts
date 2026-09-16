@@ -50,6 +50,7 @@ export interface Recording {
     playlist: boolean;
     lastSegmentAt: number | null;
     thumbs: number;
+    seconds: number;
     messages: string[];
     thumbInterval: number;
     thumbWidth: number;
