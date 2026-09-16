@@ -87,9 +87,9 @@ clipsRouter.post('/', (req, res) => {
   const id = newId('clip_');
   const now = Date.now();
   db.prepare(
-    `INSERT INTO clips (id, recording_id, title, start_sec, end_sec, spec, status, progress, public_token, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, 'queued', 0, ?, ?, ?)`,
-  ).run(id, rec.id, title, start, end, JSON.stringify(mergeSpec(parsed.data.spec)), newToken(), now, now);
+    `INSERT INTO clips (id, recording_id, source_title, title, start_sec, end_sec, spec, status, progress, public_token, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'queued', 0, ?, ?, ?)`,
+  ).run(id, rec.id, rec.title, title, start, end, JSON.stringify(mergeSpec(parsed.data.spec)), newToken(), now, now);
 
   enqueueJob('render', { clipId: id });
   res.status(201).json({ clip: clipDto(findClip(id)!) });

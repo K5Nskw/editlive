@@ -19,10 +19,16 @@ export function removeClipFiles(clip: Pick<ClipRow, 'file_path' | 'thumb_path'>)
   removeQuietly(clip.thumb_path);
 }
 
-/** Delete every file belonging to a recording, including its rendered clips. */
-export function removeRecordingFiles(recordingId: string): void {
+/**
+ * Delete a recording's files. Its clips go too unless they are being kept, in
+ * which case only the captured material is removed and the exports stay
+ * playable on their own.
+ */
+export function removeRecordingFiles(recordingId: string, options: { keepClips?: boolean } = {}): void {
   const rec = db.prepare('SELECT * FROM recordings WHERE id = ?').get(recordingId) as RecordingRow | undefined;
-  const clips = db.prepare('SELECT * FROM clips WHERE recording_id = ?').all(recordingId) as ClipRow[];
-  for (const clip of clips) removeClipFiles(clip);
+  if (!options.keepClips) {
+    const clips = db.prepare('SELECT * FROM clips WHERE recording_id = ?').all(recordingId) as ClipRow[];
+    for (const clip of clips) removeClipFiles(clip);
+  }
   if (rec) removeQuietly(rec.dir);
 }

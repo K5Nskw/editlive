@@ -85,6 +85,8 @@ export function clipDto(row: ClipRow) {
   return {
     id: row.id,
     recordingId: row.recording_id,
+    /** Where it was cut from; kept even after that recording is deleted. */
+    sourceTitle: row.source_title,
     title: row.title,
     start: row.start_sec,
     end: row.end_sec,

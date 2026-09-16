@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config } from '../config.ts';
 import { createLogger } from '../util/logger.ts';
+import { runMigrations } from './migrate.ts';
 
 const log = createLogger('db');
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -18,6 +19,7 @@ const schemaPath = [path.join(here, 'schema.sql'), path.join(here, '../../src/db
 );
 if (!schemaPath) throw new Error('schema.sql not found');
 db.exec(fs.readFileSync(schemaPath, 'utf8'));
+runMigrations(db);
 log.info(`sqlite ready at ${path.join(config.dataDir, 'editlive.db')}`);
 
 export function getSetting(key: string): string | undefined {

@@ -60,7 +60,8 @@ export const api = {
   reanalyze: (id: string) => post<{ jobId: string }>(`/api/recordings/${id}/analyze`),
   renameRecording: (id: string, title: string) =>
     request<{ recording: Recording }>(`/api/recordings/${id}`, { method: 'PATCH', body: JSON.stringify({ title }) }),
-  deleteRecording: (id: string) => request<void>(`/api/recordings/${id}`, { method: 'DELETE' }),
+  deleteRecording: (id: string, clips: 'delete' | 'keep' = 'delete') =>
+    request<void>(`/api/recordings/${id}?clips=${clips}`, { method: 'DELETE' }),
 
   clips: (recordingId?: string) =>
     request<{ clips: Clip[] }>(`/api/clips${recordingId ? `?recordingId=${recordingId}` : ''}`),

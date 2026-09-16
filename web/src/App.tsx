@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from './api';
 import { useRoute, useToast } from './hooks';
+import { Clips } from './routes/Clips';
 import { Dashboard } from './routes/Dashboard';
 import { Editor } from './routes/Editor';
 import { Login } from './routes/Login';
@@ -55,6 +56,16 @@ export function App() {
             スタジオ
           </a>
           <a
+            href="/clips"
+            className={path === '/clips' ? 'active' : ''}
+            onClick={(e) => {
+              e.preventDefault();
+              navigate('/clips');
+            }}
+          >
+            クリップ
+          </a>
+          <a
             href="/settings"
             className={path === '/settings' ? 'active' : ''}
             onClick={(e) => {
@@ -83,6 +94,12 @@ export function App() {
           integrations={integrations}
           onNotify={notify}
           onBack={() => navigate('/')}
+        />
+      ) : path === '/clips' ? (
+        <Clips
+          integrations={integrations}
+          onNotify={notify}
+          onOpenRecording={(id) => navigate(`/r/${id}`)}
         />
       ) : path === '/settings' ? (
         <Settings integrations={integrations} reload={loadIntegrations} onNotify={notify} />

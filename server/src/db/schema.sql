@@ -32,9 +32,13 @@ CREATE TABLE IF NOT EXISTS recordings (
 );
 CREATE INDEX IF NOT EXISTS recordings_started ON recordings(started_at DESC);
 
+-- A clip outlives its recording: deleting the source detaches it rather than
+-- destroying work that has already been exported. source_title remembers where
+-- it came from once the recording itself is gone.
 CREATE TABLE IF NOT EXISTS clips (
   id            TEXT PRIMARY KEY,
-  recording_id  TEXT NOT NULL REFERENCES recordings(id) ON DELETE CASCADE,
+  recording_id  TEXT REFERENCES recordings(id) ON DELETE SET NULL,
+  source_title  TEXT,
   title         TEXT NOT NULL,
   start_sec     REAL NOT NULL,
   end_sec       REAL NOT NULL,

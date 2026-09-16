@@ -95,6 +95,9 @@ async function render(payload: Record<string, unknown>, ctx: JobContext): Promis
   const clipId = requireString(payload, 'clipId');
   const clip = db.prepare('SELECT * FROM clips WHERE id = ?').get(clipId) as ClipRow | undefined;
   if (!clip) throw new Error(`clip ${clipId} not found`);
+  if (!clip.recording_id) {
+    throw new Error('元の録画が削除されているため、このクリップは作り直せません');
+  }
   const rec = getRecording(clip.recording_id);
 
   const source = sourceFor(rec);

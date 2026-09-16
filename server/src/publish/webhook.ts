@@ -27,7 +27,7 @@ export interface WebhookPayload {
   bytes: number | null;
   mediaUrl: string;
   thumbnailUrl: string | null;
-  recordingId: string;
+  recordingId: string | null;
   publishedAt: string;
 }
 

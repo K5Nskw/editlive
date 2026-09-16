@@ -75,7 +75,9 @@ export interface RenderSpec {
 
 export interface Clip {
   id: string;
-  recordingId: string;
+  recordingId: string | null;
+  /** Where it was cut from, kept even after that recording is deleted. */
+  sourceTitle: string | null;
   title: string;
   start: number;
   end: number;

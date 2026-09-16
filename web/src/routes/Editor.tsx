@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api';
 import { Player } from '../components/Player';
 import { Timeline } from '../components/Timeline';
+import { DeleteRecordingDialog } from '../components/DeleteRecordingDialog';
 import { PublishDialog } from '../components/PublishDialog';
 import { usePolling } from '../hooks';
 import type { Analysis, Aspect, Clip, FitMode, Integrations, Publication, Recording, RenderSpec } from '../types';
@@ -56,6 +57,7 @@ export function Editor({ recordingId, integrations, onNotify, onBack }: EditorPr
   const [spec, setSpec] = useState<RenderSpec>(DEFAULT_SPEC);
   const [creating, setCreating] = useState(false);
   const [publishTarget, setPublishTarget] = useState<Clip | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [notFound, setNotFound] = useState(false);
 
   // While the encoder is connected the player can show the broadcast as it
@@ -270,17 +272,7 @@ export function Editor({ recordingId, integrations, onNotify, onBack }: EditorPr
           className="danger"
           disabled={recording.status === 'live'}
           title={recording.status === 'live' ? '配信中は削除できません' : undefined}
-          onClick={async () => {
-            const detail = clips.length > 0 ? `書き出し済みのクリップ ${clips.length} 本も一緒に消えます。` : '';
-            if (!window.confirm(`「${recording.title}」を削除しますか？${detail}この操作は取り消せません。`)) return;
-            try {
-              await api.deleteRecording(recordingId);
-              onNotify('録画を削除しました');
-              onBack();
-            } catch (err) {
-              onNotify(err instanceof Error ? err.message : '削除に失敗しました', true);
-            }
-          }}
+          onClick={() => setConfirmDelete(true)}
         >
           この録画を削除
         </button>
@@ -651,6 +643,24 @@ export function Editor({ recordingId, integrations, onNotify, onBack }: EditorPr
           </div>
         </div>
       </div>
+
+      {confirmDelete && (
+        <DeleteRecordingDialog
+          recording={recording}
+          clipCount={clips.length}
+          onCancel={() => setConfirmDelete(false)}
+          onConfirm={async (choice) => {
+            try {
+              await api.deleteRecording(recordingId, choice);
+              onNotify(choice === 'keep' ? '録画を削除しました（クリップは残っています）' : '録画とクリップを削除しました');
+              onBack();
+            } catch (err) {
+              onNotify(err instanceof Error ? err.message : '削除に失敗しました', true);
+              setConfirmDelete(false);
+            }
+          }}
+        />
+      )}
 
       {publishTarget && (
         <PublishDialog

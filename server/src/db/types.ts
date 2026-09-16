@@ -33,7 +33,8 @@ export interface RecordingRow {
 
 export interface ClipRow {
   id: string;
-  recording_id: string;
+  recording_id: string | null;
+  source_title: string | null;
   title: string;
   start_sec: number;
   end_sec: number;

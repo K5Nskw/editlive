@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api';
+import { DeleteRecordingDialog } from '../components/DeleteRecordingDialog';
 import { usePolling } from '../hooks';
 import type { AppConfig, Recording, Stream } from '../types';
 import { copyText, formatBytes, formatDateTime, formatTimecode } from '../util';
@@ -22,6 +23,7 @@ export function Dashboard({ onOpen, onNotify }: DashboardProps) {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [newStream, setNewStream] = useState('');
   const [revealed, setRevealed] = useState<Record<string, boolean>>({});
+  const [deleting, setDeleting] = useState<Recording | null>(null);
 
   const load = useCallback(async () => {
     const [s, r] = await Promise.all([api.streams(), api.recordings()]);
@@ -39,14 +41,12 @@ export function Dashboard({ onOpen, onNotify }: DashboardProps) {
     onNotify((await copyText(value)) ? 'コピーしました' : 'コピーできませんでした');
   }
 
-  async function remove(rec: Recording) {
-    const clips = rec.clipCount ?? 0;
-    const detail = clips > 0 ? `書き出し済みのクリップ ${clips} 本も一緒に消えます。` : '';
-    if (!window.confirm(`「${rec.title}」を削除しますか？${detail}この操作は取り消せません。`)) return;
+  async function remove(rec: Recording, clips: 'delete' | 'keep') {
     try {
-      await api.deleteRecording(rec.id);
+      await api.deleteRecording(rec.id, clips);
       setRecordings((prev) => prev.filter((r) => r.id !== rec.id));
-      onNotify('録画を削除しました');
+      setDeleting(null);
+      onNotify(clips === 'keep' ? '録画を削除しました（クリップは残っています）' : '録画とクリップを削除しました');
     } catch (err) {
       onNotify(err instanceof Error ? err.message : '削除に失敗しました', true);
     }
@@ -242,7 +242,7 @@ export function Dashboard({ onOpen, onNotify }: DashboardProps) {
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    void remove(rec);
+                    setDeleting(rec);
                   }}
                 >
                   削除
@@ -252,6 +252,15 @@ export function Dashboard({ onOpen, onNotify }: DashboardProps) {
           );
         })}
       </div>
+
+      {deleting && (
+        <DeleteRecordingDialog
+          recording={deleting}
+          clipCount={deleting.clipCount ?? 0}
+          onCancel={() => setDeleting(null)}
+          onConfirm={(clips) => remove(deleting, clips)}
+        />
+      )}
     </div>
   );
 }

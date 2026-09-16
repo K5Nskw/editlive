@@ -91,6 +91,7 @@ recordingsRouter.patch('/:id', (req, res) => {
   res.json({ recording: recordingDto(findRecording(rec.id)!, streamOf(rec)) });
 });
 
+/** `clips=keep` detaches the exports instead of deleting them with the source. */
 recordingsRouter.delete('/:id', (req, res) => {
   const rec = findRecording(req.params.id);
   if (!rec) {
@@ -101,7 +102,13 @@ recordingsRouter.delete('/:id', (req, res) => {
     res.status(409).json({ error: '配信中の録画は削除できません' });
     return;
   }
-  removeRecordingFiles(rec.id);
+  const keepClips = req.query.clips === 'keep';
+
+  removeRecordingFiles(rec.id, { keepClips });
+  if (keepClips) {
+    // Remember where they came from before the foreign key is cleared.
+    db.prepare('UPDATE clips SET source_title = COALESCE(source_title, ?) WHERE recording_id = ?').run(rec.title, rec.id);
+  }
   db.prepare('DELETE FROM recordings WHERE id = ?').run(rec.id);
   res.status(204).end();
 });
